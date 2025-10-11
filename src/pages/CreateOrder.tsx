@@ -6,6 +6,7 @@ import {
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { db, storage } from '../firebase';
+import CustomerLayout from '../components/CustomerLayout';
 import {
     collection, query, where, getDocs,
     addDoc, Timestamp
@@ -58,7 +59,8 @@ const CreateOrder: React.FC = () => {
     }, [navigate]);
 
     const handleUpload = async () => {
-        const uid = sessionStorage.getItem('uid');
+    console.log("[DEBUG] Bấm nút tạo đơn");
+    const uid = sessionStorage.getItem('uid');
         if (!uid) {
             message.error('Người dùng chưa đăng nhập.');
             return;
@@ -70,9 +72,10 @@ const CreateOrder: React.FC = () => {
 
             const imageUrls: { [key: string]: string } = {};
             for (let i = 0; i < fileList.length; i++) {
-                const file = fileList[i].originFileObj;
-                const storageRef = ref(storage, `repairOrders/${uid}/${Date.now()}_${file.name}`);
-                await uploadBytes(storageRef, file);
+                const file = fileList[i].originFileObj as File;
+                const safeName = `${Date.now()}_${(file.name || 'file')}`.replace(/[^A-Za-z0-9._-]/g, '_');
+                const storageRef = ref(storage, `repairOrders/${uid}/${safeName}`);
+                await uploadBytes(storageRef, file, { contentType: file.type || 'application/octet-stream' });
                 const url = await getDownloadURL(storageRef);
                 imageUrls[`img${i + 1}`] = url;
             }
@@ -114,6 +117,7 @@ const CreateOrder: React.FC = () => {
                 totalCostId: 0,
                 uid: uid,
                 workshopId: values.workshopId,
+                repairplan: '',
             });
 
             message.success('Tạo đơn sửa chữa thành công!');
@@ -132,16 +136,37 @@ const CreateOrder: React.FC = () => {
 
     const isReadOnly = selectedShipId !== null;
 
+    const [customerName, setCustomerName] = useState('');
+    const [loadingUser, setLoadingUser] = useState(true);
+
+    useEffect(() => {
+        const loadCustomer = async () => {
+            try {
+                const uid = sessionStorage.getItem('uid');
+                if (!uid) return;
+                const customersRef = query(collection(db, 'customers'), where('uid', '==', uid));
+                const snap = await getDocs(customersRef);
+                if (!snap.empty) setCustomerName(snap.docs[0].data().fullName || 'Khách hàng');
+            } finally {
+                setLoadingUser(false);
+            }
+        };
+        loadCustomer();
+    }, []);
+
     if (loading) {
-        return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
+        return (
+            <CustomerLayout userName={customerName} loadingUser={loadingUser}>
+                <div className="p-6"><Spin /> Đang tải dữ liệu...</div>
+            </CustomerLayout>
+        );
     }
 
     return (
-        <Layout className="min-h-screen bg-gray-100">
-            <Header className="bg-white shadow-md px-6 py-4">
+        <CustomerLayout userName={customerName} loadingUser={loadingUser}>
+            <div className="mb-4">
                 <Title level={3} className="m-0">Tạo đơn sửa chữa</Title>
-            </Header>
-            <Content className="m-6 p-6 bg-white rounded-lg shadow">
+            </div>
                 <Form form={form} layout="vertical"  initialValues={{
                     workshopId: null,
                     description: '',
@@ -239,8 +264,7 @@ const CreateOrder: React.FC = () => {
                         <Button type="primary" onClick={handleUpload} loading={uploading}>Tạo đơn</Button>
                     </Form.Item>
                 </Form>
-            </Content>
-        </Layout>
+        </CustomerLayout>
     );
 };
 

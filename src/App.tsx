@@ -6,6 +6,9 @@ import AuthenComponent from "./pages/AuthenComponent";
 import CustomerHome from "./pages/CustomerHome";
 import OrderDetail from "./pages/OrderDetail";
 import CreateOrder from "./pages/CreateOrder";
+import InspectorHome from "./pages/InspectorHome";
+import OrderDetailInspector from "./pages/OrderDetailInspector";
+import ProposalInspector from "./pages/ProposalInspector";
 
 const App: React.FC = () => {
   return (
@@ -21,24 +24,38 @@ const App: React.FC = () => {
                 </PrivateRoute>
               }
           />
-            <Route path="/orders/:id"
-                   element={
-                <PrivateRoute allowedRoles={['customer']}>
-                    <OrderDetail />
-                </PrivateRoute>} />
+      <Route path="/orders/:id"
+           element={
+        <PrivateRoute allowedRoles={['customer']}>
+          <OrderDetail />
+        </PrivateRoute>} />
+
+      {/* Route chi tiết đơn cho inspector */}
+      <Route path="/inspector/orders/:id"
+           element={
+        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+          <OrderDetailInspector />
+        </PrivateRoute>} />
+
+      {/* Route đề xuất phương án cho inspector */}
+      <Route path="/inspector/proposal/:id"
+           element={
+        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+          <ProposalInspector />
+        </PrivateRoute>} />
             <Route path="/createRepairOder"
                    element={
                        <PrivateRoute allowedRoles={['customer']}>
                            <CreateOrder />
                        </PrivateRoute>} />
 
-            <Route
-              path="/officer"
-              element={
-                <PrivateRoute allowedRoles={['officer', 'inspector', 'accountant']}>
-                {/*    something */}
-                </PrivateRoute>
-              }
+          <Route
+            path="/inspector"
+            element={
+              <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+                <InspectorHome />
+              </PrivateRoute>
+            }
           />
         </Routes>
       </Router>

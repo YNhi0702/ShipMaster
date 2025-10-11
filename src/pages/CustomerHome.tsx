@@ -4,6 +4,7 @@ import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import CustomerLayout from '../components/CustomerLayout';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
@@ -116,18 +117,8 @@ const CustomerHome: React.FC = () => {
     ];
 
     return (
-        <Layout className="min-h-screen bg-gray-100">
-            <Header className="bg-white shadow-md flex justify-between items-center px-6 py-4">
-                <Title level={3} className="flex items-center gap-3 select-none" style={{ marginBottom: 0 }}>
-                    Ship <span className="text-blue-600">Master</span>
-                </Title>
-                <div className="flex items-center gap-3 select-none text-xl font-bold">
-                    <Avatar icon={<UserOutlined />} />
-                    {loadingUser ? <Spin size="small" /> : <span>{userName}</span>}
-                </div>
-            </Header>
-
-            <Content className="m-6 p-6 bg-white rounded-lg shadow-sm">
+        <CustomerLayout userName={userName} loadingUser={loadingUser}>
+            <div className="m-0 p-0">
                 <Button
                     type="primary"
                     size="large"
@@ -145,8 +136,8 @@ const CustomerHome: React.FC = () => {
                     bordered
                     className="shadow-sm"
                 />
-            </Content>
-        </Layout>
+            </div>
+        </CustomerLayout>
     );
 };
 

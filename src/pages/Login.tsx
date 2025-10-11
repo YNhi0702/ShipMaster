@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Checkbox, message } from 'antd';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, query, collection, where, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginFormValues {
@@ -21,26 +21,22 @@ const Login: React.FC = () => {
             const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
             const user = userCredential.user;
             sessionStorage.setItem('uid', user.uid);
-            // Lấy thông tin role từ Firestore
-            const docRef = doc(db, 'users', user.uid);
-            const docSnap = await getDoc(docRef);
 
-            if (!docSnap.exists()) {
-                message.error('Không tìm thấy thông tin người dùng.');
-                setLoading(false);
-                return;
-            }
-
-            const userData = docSnap.data();
-            const role = userData?.role || 'customer';
-
-            message.success(`Đăng nhập thành công ${role === 'customer' ? '(Khách hàng)' : '(Cán bộ)'}`);
-
-            // Điều hướng theo role
-            if (role === 'customer') {
-                navigate('/');
+            if (isOfficer) {
+                // Kiểm tra trong collection employees với Role_ID = 1
+                const q = query(collection(db, 'employees'), where('Email', '==', values.email), where('Role_ID', '==', 1));
+                const snapshot = await getDocs(q);
+                if (snapshot.empty) {
+                    message.error('Tài khoản này không phải giám định viên!');
+                    setLoading(false);
+                    return;
+                }
+                message.success('Đăng nhập thành công (Giám định viên)');
+                navigate('/inspector');
             } else {
-                navigate('/officer');   // hoặc trang dashboard của cán bộ
+                // Đăng nhập khách hàng: chỉ cần đúng tài khoản là vào home
+                message.success('Đăng nhập thành công (Khách hàng)');
+                navigate('/');
             }
         } catch (error: any) {
             message.error("Đăng nhập thất bại: " + error.message);
