@@ -1,48 +1,40 @@
 import React, { useState } from 'react';
-import { Layout, Avatar, Spin, Dropdown, Button } from 'antd';
+import { Layout, Avatar, Spin, Dropdown } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import InspectorSidebar from './InspectorSidebar';
+import WorkshopSidebar from './WorkshopSidebar';
 
 const { Header, Content } = Layout;
 
-interface InspectorLayoutProps {
-    selectedKey: 'orders' | 'proposal' | 'inspected';
-    onSelect: (key: 'orders' | 'proposal' | 'inspected') => void;
+interface WorkshopLayoutProps {
+    selectedKey?: 'orders' | 'proposal' | 'schedule' | 'inspected';
+    onSelect?: (k: string) => void;
     userName: string;
     loadingUser: boolean;
     children: React.ReactNode;
 }
 
-const InspectorLayout: React.FC<InspectorLayoutProps> = ({ selectedKey, onSelect, userName, loadingUser, children }) => {
+const WorkshopLayout: React.FC<WorkshopLayoutProps> = ({ selectedKey = 'orders', onSelect, userName, loadingUser, children }) => {
     const navigate = useNavigate();
     const [collapsed, setCollapsed] = useState(false);
 
-    // default navigation handler in case parent doesn't provide onSelect
     const defaultOnSelect = (k: string) => {
-        if (k === 'orders') navigate('/inspector');
-        else if (k === 'proposal') navigate('/inspector?tab=proposal');
-        else if (k === 'inspected') navigate('/inspector?tab=inspected');
-        else navigate('/inspector');
+        if (k === 'orders') navigate('/workshop');
+        else if (k === 'schedule') navigate('/workshop?tab=schedule');
+        else if (k === 'inspected') navigate('/workshop?tab=inspected');
+        else navigate('/workshop');
     };
 
     return (
         <Layout className="min-h-screen bg-gray-100">
-            <InspectorSidebar
-                selectedKey={selectedKey}
-                onSelect={(key) => onSelect ? onSelect(key as 'orders' | 'proposal' | 'inspected') : defaultOnSelect(key)}
-                collapsed={collapsed}
-                onCollapse={setCollapsed}
-            />
+            <WorkshopSidebar selectedKey={selectedKey} onSelect={(k) => onSelect ? onSelect(k) : defaultOnSelect(k)} collapsed={collapsed} onCollapse={setCollapsed} />
             <Layout>
                 <Header className="bg-white shadow-md flex justify-end items-center px-6 py-4">
                     <Dropdown
                         trigger={["click"]}
                         placement="bottomRight"
                         menu={{
-                            items: [
-                                { key: 'logout', label: 'Đăng xuất' },
-                            ],
+                            items: [{ key: 'logout', label: 'Đăng xuất' }],
                             onClick: ({ key }: { key: string }) => {
                                 if (key === 'logout') {
                                     sessionStorage.clear();
@@ -65,6 +57,4 @@ const InspectorLayout: React.FC<InspectorLayoutProps> = ({ selectedKey, onSelect
     );
 };
 
-export default InspectorLayout;
-
-
+export default WorkshopLayout;

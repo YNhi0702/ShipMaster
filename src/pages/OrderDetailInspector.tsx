@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Typography, Descriptions, Image, Button, Spin, message, Form, Input, Avatar } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
@@ -22,8 +22,11 @@ const OrderDetailInspector: React.FC = () => {
     const [showProposal, setShowProposal] = useState(false);
     const [proposalLoading, setProposalLoading] = useState(false);
     const [form] = Form.useForm();
+    const [proposalChanged, setProposalChanged] = useState(false);
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
+    const location = useLocation();
+    const isInspectedView = new URLSearchParams(location.search).get('view') === 'inspected';
 
     useEffect(() => {
         const fetchData = async () => {
@@ -56,7 +59,12 @@ const OrderDetailInspector: React.FC = () => {
                             createdAt: data?.StartDate?.toDate().toLocaleDateString('vi-VN'),
                         });
                         setAccepted(data.Status !== 'Chờ giám định');
-                        setShowProposal(data.Status === 'Đang giám định');
+                        // Show proposal form when inspector should propose or re-propose
+                        // but if opened from inspected view, do not show the editable form
+                        setShowProposal(!isInspectedView && (data.Status === 'Đang giám định' || data.Status === 'Yêu cầu đề xuất lại'));
+                        // Prefill form with existing proposal if any
+                        form.setFieldsValue({ proposal: data.proposal || data.repairplan || '' });
+                        setProposalChanged(false);
                     } else {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/inspector');
@@ -151,14 +159,28 @@ const OrderDetailInspector: React.FC = () => {
 
     const handleProposal = async (values: any) => {
         if (!orderData) return;
+        const existing = (orderData.proposal || orderData.repairplan || '').toString().trim();
+        const incoming = (values.proposal || '').toString().trim();
+
+        // If status requests re-proposal, require that incoming proposal is different
+        if (orderData.Status === 'Yêu cầu đề xuất lại' && incoming === existing) {
+            message.warning('Vui lòng chỉnh sửa đề xuất trước khi gửi.');
+            return;
+        }
+
+        if (!incoming) {
+            message.warning('Nội dung đề xuất không được để trống.');
+            return;
+        }
+
         setProposalLoading(true);
         try {
             await updateDoc(doc(db, 'repairOrder', orderData.id), {
-                proposal: values.proposal,
+                proposal: incoming,
                 Status: 'Đã đề xuất phương án',
             });
             message.success('Đã gửi đề xuất phương án!');
-            setOrderData((prev: any) => ({ ...prev, proposal: values.proposal, Status: 'Đã đề xuất phương án' }));
+            setOrderData((prev: any) => ({ ...prev, proposal: incoming, Status: 'Đã đề xuất phương án' }));
             setShowProposal(false);
         } catch (e) {
             message.error('Lỗi khi gửi đề xuất.');
@@ -185,12 +207,16 @@ const OrderDetailInspector: React.FC = () => {
         proposal,
     } = orderData;
 
+    // also check for repairplan (legacy field) and prefer it for display when present
+    const existingPlan = (orderData.proposal || orderData.repairplan || '').toString().trim();
+
     return (
         <InspectorLayout
             selectedKey="orders"
             onSelect={(key) => {
                 if (key === 'orders') navigate('/inspector');
                 else if (key === 'proposal') navigate('/inspector?tab=proposal');
+                else if (key === 'inspected') navigate('/inspector?tab=inspected');
             }}
             userName={userName}
             loadingUser={loadingUser}
@@ -266,10 +292,51 @@ const OrderDetailInspector: React.FC = () => {
                     </Button>
                 )}
                 
-                {proposal && (
+                {/* If customer requested a re-proposal, show their request */}
+                {orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && (
+                    <div className="mt-6 max-w-xl">
+                        <Title level={4}>Yêu cầu điều chỉnh từ khách hàng</Title>
+                        <div className="bg-yellow-50 p-4 rounded border border-yellow-200 whitespace-pre-line">
+                            <div className="mb-2 font-medium">{orderData.CustomerAdjustmentRequest.createdByName || 'Khách hàng'}</div>
+                            <div className="text-sm text-gray-700">{orderData.CustomerAdjustmentRequest.text}</div>
+                        </div>
+                    </div>
+                )}
+
+                {showProposal && (
                     <div className="mt-8 max-w-xl">
-                        <Title level={4}>Phương án đã đề xuất</Title>
-                        <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line">{proposal}</div>
+                        <Title level={4}>{orderData.Status === 'Yêu cầu đề xuất lại' ? 'Chỉnh sửa đề xuất (bắt buộc)' : 'Gửi đề xuất phương án'}</Title>
+
+                        {/* Display current proposal if exists */}
+                        {proposal && (
+                            <div className="mb-4">
+                                <div className="text-sm text-gray-500">Phương án hiện tại:</div>
+                                <div className="bg-gray-50 p-3 rounded border border-gray-200 whitespace-pre-line">{proposal}</div>
+                            </div>
+                        )}
+
+                        <Form form={form} onFinish={handleProposal} onValuesChange={() => {
+                            const val = (form.getFieldValue('proposal') || '').toString().trim();
+                            const existing = (proposal || '').toString().trim();
+                            setProposalChanged(val !== existing && val.length > 0);
+                        }}>
+                            <Form.Item name="proposal" rules={[{ required: true, message: 'Vui lòng nhập đề xuất.' }]}> 
+                                <Input.TextArea rows={8} placeholder="Viết đề xuất phương án ở đây..." />
+                            </Form.Item>
+                            <div className="flex gap-3 justify-end">
+                                <Button htmlType="submit" type="primary" loading={proposalLoading} disabled={orderData.Status === 'Yêu cầu đề xuất lại' ? !proposalChanged : false}>
+                                    Gửi đề xuất
+                                </Button>
+                            </div>
+                        </Form>
+                    </div>
+                )}
+
+                {/* Always show existing proposal/repair plan in read-only mode for inspected or other statuses */}
+                {existingPlan && (
+                    <div className="mt-8 max-w-xl">
+                        <Title level={4}>Phương án sửa chữa</Title>
+                        <div className="bg-gray-50 p-3 rounded border border-gray-200 whitespace-pre-line">{existingPlan}</div>
                     </div>
                 )}
         </InspectorLayout>

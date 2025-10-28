@@ -9,6 +9,9 @@ import CreateOrder from "./pages/CreateOrder";
 import InspectorHome from "./pages/InspectorHome";
 import OrderDetailInspector from "./pages/OrderDetailInspector";
 import ProposalInspector from "./pages/ProposalInspector";
+import OrderDetailDone from "./pages/OrderDetailDone";
+import WorkshopHome from "./pages/WorkshopHome";
+import OrderInfo from "./pages/OrderInfo";
 
 const App: React.FC = () => {
   return (
@@ -37,6 +40,15 @@ const App: React.FC = () => {
           <OrderDetailInspector />
         </PrivateRoute>} />
 
+
+
+      {/* Route detail for done/inspected orders (shared read-only view) */}
+      <Route path="/inspector/done/:id"
+           element={
+        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+          <OrderDetailDone />
+        </PrivateRoute>} />
+
       {/* Route đề xuất phương án cho inspector */}
       <Route path="/inspector/proposal/:id"
            element={
@@ -57,6 +69,19 @@ const App: React.FC = () => {
               </PrivateRoute>
             }
           />
+              <Route
+                path="/workshop"
+                element={
+                  <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+                    <WorkshopHome />
+                  </PrivateRoute>
+                }
+              />
+              <Route path="/workshop/orders/:id"
+                   element={
+                    <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+                      <OrderInfo />
+                    </PrivateRoute>} />
         </Routes>
       </Router>
   );

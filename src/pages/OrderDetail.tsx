@@ -116,6 +116,22 @@ const OrderDetail: React.FC = () => {
 
     const { createdAt, Status, description, imageList = {}, repairplan } = orderData;
 
+    // normalize helper to compare Vietnamese status strings reliably
+    const normalize = (str: any) =>
+        String(str || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+
+    const statusNorm = normalize(Status);
+    const showCancelFor = new Set([
+        normalize('chờ giám định'),
+        normalize('đang giám định'),
+        normalize('đã đề xuất phương án'),
+        normalize('yêu cầu đề xuất lại'),
+    ]);
+
     // 👉 Menu dropdown đăng xuất
     const menuItems = [
         { key: 'logout', label: 'Đăng xuất' },
@@ -181,6 +197,7 @@ const OrderDetail: React.FC = () => {
                 </div>
 
                 <div className="mt-6 flex justify-end">
+                    {showCancelFor.has(statusNorm) && (
                         <Button
                             danger
                             loading={canceling}
@@ -202,6 +219,7 @@ const OrderDetail: React.FC = () => {
                         >
                             Hủy đơn
                         </Button>
+                    )}
                 </div>
         </CustomerLayout>
     );

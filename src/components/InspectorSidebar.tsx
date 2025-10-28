@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
-import { SolutionOutlined, FileDoneOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { SolutionOutlined, FileDoneOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Sider } = Layout;
@@ -56,6 +56,11 @@ const InspectorSidebar: React.FC<InspectorSidebarProps> = ({ selectedKey, onSele
                         key: 'proposal',
                         icon: <FileDoneOutlined />,
                         label: 'Đề xuất phương án',
+                    },
+                    {
+                        key: 'inspected',
+                        icon: <CheckCircleOutlined />,
+                        label: 'Đã giám định',
                     },
                 ]}
             />

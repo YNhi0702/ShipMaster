@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Button, Table, Typography, Avatar, Spin, message, Dropdown } from 'antd';
+import { Layout, Button, Table, Typography, Avatar, Spin, message, Dropdown, Tag } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
@@ -19,10 +19,16 @@ const InspectorHome: React.FC = () => {
     const [userName, setUserName] = useState('');
     const [orders, setOrders] = useState<any[]>([]);
     const [proposalOrders, setProposalOrders] = useState<any[]>([]);
+    const [inspectedOrders, setInspectedOrders] = useState<any[]>([]);
     const [loadingUser, setLoadingUser] = useState(true);
     const [loadingOrders, setLoadingOrders] = useState(true);
-    const [selectedKey, setSelectedKey] = useState<'orders' | 'proposal'>('orders');
+    const [selectedKey, setSelectedKey] = useState<'orders' | 'proposal' | 'inspected'>('orders');
     const [refreshing, setRefreshing] = useState(false);
+
+    const normalize = (s: string) => {
+        if (!s) return '';
+        return String(s).toLowerCase().trim();
+    };
 
     const fetchOrdersData = async () => {
         const uid = sessionStorage.getItem('uid');
@@ -73,11 +79,12 @@ const InspectorHome: React.FC = () => {
             }));
             setOrders(ordersData);
 
-            // Đơn chờ đề xuất phương án - filter để xử lý dấu cách thừa
+            // Đơn chờ đề xuất phương án / yêu cầu đề xuất lại / đã đề xuất: include multiple statuses
+            const targetStatuses = ['Đang giám định', 'Yêu cầu đề xuất lại', 'Đã đề xuất phương án'];
             const proposalOrders = allOrdersSnapshot.docs.filter(doc => {
                 const order = doc.data();
                 const status = order.Status;
-                return status && status.trim() === 'Đang giám định' && order.inspectorId === uid;
+                return status && targetStatuses.includes(status.trim()) && order.inspectorId === uid;
             });
             
             const proposalData = await Promise.all(proposalOrders.map(async (docSnap) => {
@@ -111,6 +118,42 @@ const InspectorHome: React.FC = () => {
                 };
             }));
             setProposalOrders(proposalData);
+
+            // Inspected orders: those NOT in the excluded list and assigned to this inspector
+            const excludedList = ['Chờ giám định', 'Đang giám định', 'Yêu cầu đề xuất lại', 'Đã đề xuất phương án'].map(normalize);
+            const inspectedDocs = allOrdersSnapshot.docs.filter(docSnap => {
+                const order = docSnap.data();
+                const status = normalize(order?.Status || order?.status || '');
+                return order?.inspectorId === uid && status && !excludedList.includes(status);
+            });
+
+            const inspectedData = await Promise.all(inspectedDocs.map(async (docSnap) => {
+                const order = docSnap.data();
+                const createdAt = order.StartDate?.toDate ? order.StartDate.toDate().toLocaleDateString('vi-VN') : '';
+                let shipName = 'Không xác định';
+                let workshopName = 'Không xác định';
+                try {
+                    if (order.shipId) {
+                        const shipDoc = await getDoc(doc(db, 'ship', order.shipId));
+                        shipName = shipDoc.exists() ? shipDoc.data().name : 'Không xác định';
+                    }
+                    if (order.workshopId) {
+                        const workshopDoc = await getDoc(doc(db, 'workShop', order.workshopId));
+                        workshopName = workshopDoc.exists() ? workshopDoc.data().name : 'Không xác định';
+                    }
+                } catch (error) {
+                    console.error('Error fetching ship/workshop names:', error);
+                }
+                return {
+                    id: docSnap.id,
+                    ...order,
+                    createdAt,
+                    shipName,
+                    workshopName,
+                    assignedInspector: order.assignedInspector || 'Chưa được gán',
+                };
+            }));
+            setInspectedOrders(inspectedData);
         } catch (error) {
             message.error('Lỗi khi tải dữ liệu!');
         } finally {
@@ -118,15 +161,15 @@ const InspectorHome: React.FC = () => {
         }
     };
 
+    
+
     // Xử lý URL parameters để set tab đúng
     useEffect(() => {
         const urlParams = new URLSearchParams(location.search);
         const tab = urlParams.get('tab');
-        if (tab === 'proposal') {
-            setSelectedKey('proposal');
-        } else {
-            setSelectedKey('orders');
-        }
+        if (tab === 'proposal') setSelectedKey('proposal');
+        else if (tab === 'inspected') setSelectedKey('inspected');
+        else setSelectedKey('orders');
     }, [location.search]);
 
     useEffect(() => {
@@ -213,6 +256,8 @@ const InspectorHome: React.FC = () => {
         },
     ];
 
+    
+
     // Cột cho tab Đề xuất phương án
     const columnsProposal = [
         {
@@ -220,6 +265,19 @@ const InspectorHome: React.FC = () => {
             key: 'stt',
             width: 60,
             render: (_: any, __: any, index: number) => index + 1,
+        },
+        {
+            title: 'Trạng thái',
+            dataIndex: 'Status',
+            key: 'Status',
+            render: (status: string) => {
+                const st = status?.toString().trim() || '';
+                let color = 'default';
+                if (st === 'Đang giám định') color = 'orange';
+                else if (st === 'Yêu cầu đề xuất lại') color = 'red';
+                else if (st === 'Đã đề xuất phương án') color = 'green';
+                return <Tag color={color}>{st}</Tag>;
+            }
         },
         {
             title: 'Mã đơn',
@@ -256,13 +314,37 @@ const InspectorHome: React.FC = () => {
         {
             title: 'Hành động',
             key: 'action',
+            render: (_: any, record: any) => {
+                const st = (record.Status || '').toString().trim();
+                let label = 'Đề xuất';
+                if (st === 'Đã đề xuất phương án') label = 'Xem';
+                else if (st === 'Yêu cầu đề xuất lại') label = 'Đề xuất lại';
+                return (
+                    <Button
+                        type="default"
+                        className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
+                        onClick={() => navigate(`/inspector/proposal/${record.id}`)}
+                    >
+                        {label}
+                    </Button>
+                );
+            },
+        },
+    ];
+
+    // Cột cho tab Đã giám định (chỉ có hành động Xem)
+    const columnsInspected = [
+        ...columnsProposal.filter((c: any) => c.key !== 'action'),
+        {
+            title: 'Hành động',
+            key: 'action',
             render: (_: any, record: any) => (
                 <Button
                     type="default"
                     className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
-                    onClick={() => navigate(`/inspector/proposal/${record.id}`)}
+                        onClick={() => navigate(`/inspector/done/${record.id}`)}
                 >
-                    Đề xuất
+                    Xem
                 </Button>
             ),
         },
@@ -272,8 +354,9 @@ const InspectorHome: React.FC = () => {
         <InspectorLayout
             selectedKey={selectedKey}
             onSelect={(key) => {
-                setSelectedKey(key as 'orders' | 'proposal');
+                setSelectedKey(key as 'orders' | 'proposal' | 'inspected');
                 if (key === 'proposal') navigate('/inspector?tab=proposal', { replace: true });
+                else if (key === 'inspected') navigate('/inspector?tab=inspected', { replace: true });
                 else navigate('/inspector', { replace: true });
             }}
             userName={userName}
@@ -312,9 +395,25 @@ const InspectorHome: React.FC = () => {
                             </div>
                         </>
                     )}
+
+                    {selectedKey === 'inspected' && (
+                        <>
+                            <Title level={4}>Danh sách đơn đã giám định</Title>
+                            <div className="w-full overflow-x-auto">
+                                <Table
+                                    columns={columnsInspected}
+                                    dataSource={inspectedOrders}
+                                    rowKey="id"
+                                    loading={loadingOrders || refreshing}
+                                    bordered
+                                    className="shadow-sm"
+                                    scroll={{ x: 'max-content' }}
+                                />
+                            </div>
+                        </>
+                    )}
                 </div>
         </InspectorLayout>
     );
 };
-
 export default InspectorHome;

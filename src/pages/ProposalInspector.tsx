@@ -24,8 +24,17 @@ const ProposalInspector: React.FC = () => {
     const [proposalLoading, setProposalLoading] = useState(false);
     const [form] = Form.useForm();
     const [proposal, setProposal] = useState<string>('');
+    const [existingProposal, setExistingProposal] = useState<string>('');
+    const [proposalChanged, setProposalChanged] = useState<boolean>(false);
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
+
+    const normalize = (str: any) =>
+        String(str || '')
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
 
     useEffect(() => {
         const fetchData = async () => {
@@ -52,11 +61,20 @@ const ProposalInspector: React.FC = () => {
                     const orderSnap = await getDoc(orderRef);
                     if (orderSnap.exists()) {
                         const data = orderSnap.data();
-                        setOrderData({
-                            id,
-                            ...data,
-                            createdAt: data?.StartDate?.toDate().toLocaleDateString('vi-VN'),
-                        });
+                            const existing = data?.repairplan || data?.proposal || '';
+                            setOrderData({
+                                id,
+                                ...data,
+                                createdAt: data?.StartDate?.toDate().toLocaleDateString('vi-VN'),
+                            });
+                            setExistingProposal(existing);
+                            setProposal(existing);
+                            // ensure the Antd form field is also populated so the textarea shows the existing proposal
+                            try {
+                                form.setFieldsValue({ proposal: existing });
+                            } catch (e) {
+                                // ignore if form not ready
+                            }
                     } else {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/inspector');
@@ -102,6 +120,18 @@ const ProposalInspector: React.FC = () => {
         if (!orderData) return;
         setProposalLoading(true);
         try {
+            // If this is a re-proposal request or currently in 'đang giám định', ensure content changed
+            const statusNorm = normalize(orderData.Status);
+            const requireChange = new Set([normalize('yêu cầu đề xuất lại'), normalize('đang giám định')]);
+            if (requireChange.has(statusNorm)) {
+                const prev = (existingProposal || '').toString().trim();
+                const cur = (proposal || '').toString().trim();
+                if (!cur || cur === prev) {
+                    message.error('Vui lòng chỉnh sửa/nhập phương án mới trước khi gửi.');
+                    setProposalLoading(false);
+                    return;
+                }
+            }
             await updateDoc(doc(db, 'repairOrder', orderData.id), {
                 repairplan: proposal,
                 Status: 'Đã đề xuất phương án',
@@ -137,6 +167,7 @@ const ProposalInspector: React.FC = () => {
             onSelect={(key) => {
                 if (key === 'orders') navigate('/inspector');
                 else if (key === 'proposal') navigate('/inspector?tab=proposal');
+                else if (key === 'inspected') navigate('/inspector?tab=inspected');
             }}
             userName={userName}
             loadingUser={loadingUser}
@@ -201,6 +232,16 @@ const ProposalInspector: React.FC = () => {
 
                 <div className="mt-8">
                     <Title level={4}>Đề xuất phương án sửa chữa</Title>
+                    {/* If customer requested re-proposal, show their request */}
+                    {orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && (
+                        <div className="mb-4 max-w-2xl">
+                            <div className="font-medium">Yêu cầu điều chỉnh từ khách hàng</div>
+                            <div className="bg-yellow-50 p-3 rounded border border-yellow-200 whitespace-pre-line">
+                                <div className="text-sm text-gray-700">{orderData.CustomerAdjustmentRequest.text}</div>
+                            </div>
+                        </div>
+                    )}
+
                     <Form
                         form={form}
                         layout="vertical"
@@ -215,15 +256,34 @@ const ProposalInspector: React.FC = () => {
                             <Input.TextArea 
                                 rows={6} 
                                 value={proposal}
-                                onChange={(e) => setProposal(e.target.value)}
+                                onChange={(e) => {
+                                    const v = e.target.value;
+                                    setProposal(v);
+                                    const prev = (existingProposal || '').toString().trim();
+                                    const cur = (v || '').toString().trim();
+                                    setProposalChanged(cur !== prev && cur.length > 0);
+                                }}
                                 placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..." 
                             />
                         </Form.Item>
 
                         <Form.Item>
-                            <Button type="primary" htmlType="submit" loading={proposalLoading} size="large">
-                                Gửi đề xuất phương án
-                            </Button>
+                            {/* Hide send button when already proposed */}
+                            {orderData.Status !== 'Đã đề xuất phương án' && (
+                                    <Button
+                                        type="primary"
+                                        htmlType="submit"
+                                        loading={proposalLoading}
+                                        size="large"
+                                        disabled={(() => {
+                                            const statusNorm = normalize(orderData.Status);
+                                            const requireChange = new Set([normalize('yêu cầu đề xuất lại'), normalize('đang giám định')]);
+                                            return requireChange.has(statusNorm) ? !proposalChanged : false;
+                                        })()}
+                                    >
+                                        Gửi đề xuất phương án
+                                    </Button>
+                                )}
                         </Form.Item>
                     </Form>
                 </div>
