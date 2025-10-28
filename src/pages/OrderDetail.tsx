@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar, Dropdown } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
-import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { Modal, Form, Input } from 'antd';
 import { db } from '../firebase';
 import CustomerLayout from '../components/CustomerLayout';
 
@@ -23,6 +24,9 @@ const OrderDetail: React.FC = () => {
     const [loadingUser, setLoadingUser] = useState(true);
     const [canceling, setCanceling] = useState(false);
     const [accepting, setAccepting] = useState(false);
+    const [reproposalModalVisible, setReproposalModalVisible] = useState(false);
+    const [reproposalSubmitting, setReproposalSubmitting] = useState(false);
+    const [reproposalForm] = Form.useForm();
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -148,16 +152,43 @@ const OrderDetail: React.FC = () => {
         if (!id) return;
         setAccepting(true);
         try {
+            // set status to scheduling phase so workshop can arrange schedule
             await updateDoc(doc(db, 'repairOrder', id), {
-                Status: 'Đã đồng ý sửa chữa',
+                Status: 'Sắp xếp lịch sửa chữa',
             });
-            message.success('Đã đồng ý phương án sửa chữa!');
-            // Refresh the page to update the status
-            window.location.reload();
+            message.success('Đã đồng ý — chuyển sang bước sắp xếp lịch.');
+            // navigate back to home so the user returns to the main list
+            navigate('/');
         } catch (error) {
             message.error('Lỗi khi đồng ý sửa chữa.');
         } finally {
             setAccepting(false);
+        }
+    };
+
+    const handleRequestReproposal = async (text: string) => {
+        if (!id) return;
+        try {
+            setReproposalSubmitting(true);
+            const payload: any = {
+                Status: 'Yêu cầu đề xuất lại',
+                CustomerAdjustmentRequest: {
+                    text,
+                    createdAt: Timestamp.now(),
+                    createdByUid: sessionStorage.getItem('uid') || null,
+                    createdByName: userName || null,
+                },
+            };
+            await updateDoc(doc(db, 'repairOrder', id), payload);
+            message.success('Đã gửi yêu cầu đề xuất lại.');
+            setReproposalModalVisible(false);
+            reproposalForm.resetFields();
+            // navigate back to home so the user returns to the main list
+            navigate('/');
+        } catch (e) {
+            message.error('Lỗi khi gửi yêu cầu.');
+        } finally {
+            setReproposalSubmitting(false);
         }
     };
 
@@ -180,8 +211,16 @@ const OrderDetail: React.FC = () => {
 
                 {repairplan && (
                     <div className="mt-6">
-                        <Title level={4}>Phương án sửa chữa</Title>
-                        <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line">
+                        <div className="flex items-start justify-between">
+                            <Title level={4} className="m-0">Phương án sửa chữa</Title>
+                            {statusNorm === normalize('đã đề xuất phương án') && (
+                                <div className="flex gap-2">
+                                    <Button type="primary" loading={accepting} onClick={handleAcceptRepair}>Đồng ý</Button>
+                                    <Button loading={reproposalSubmitting} onClick={() => setReproposalModalVisible(true)}>Đề xuất lại</Button>
+                                </div>
+                            )}
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line mt-2">
                             {repairplan}
                         </div>
                     </div>
@@ -221,6 +260,19 @@ const OrderDetail: React.FC = () => {
                         </Button>
                     )}
                 </div>
+                <Modal
+                    title="Yêu cầu đề xuất lại"
+                    visible={reproposalModalVisible}
+                    onCancel={() => setReproposalModalVisible(false)}
+                    onOk={() => reproposalForm.submit()}
+                    confirmLoading={reproposalSubmitting}
+                >
+                    <Form form={reproposalForm} onFinish={(values) => handleRequestReproposal(values.reason)} layout="vertical">
+                        <Form.Item name="reason" label="Lý do" rules={[{ required: true, message: 'Vui lòng nhập lý do yêu cầu đề xuất lại' }] }>
+                            <Input.TextArea rows={4} placeholder="Nhập yêu cầu đề xuất (bắt buộc)" />
+                        </Form.Item>
+                    </Form>
+                </Modal>
         </CustomerLayout>
     );
 };
