@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Layout, Typography, Descriptions, Image, Button, Spin, message, Form, Input } from 'antd';
+import { Layout, Typography, Descriptions, Image, Button, Spin, message, Form, Input, Modal, Select, InputNumber, Row, Col, Divider, Card } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import InspectorSidebar from '../components/InspectorSidebar';
 import InspectorLayout from '../components/InspectorLayout';
@@ -26,8 +26,12 @@ const ProposalInspector: React.FC = () => {
     const [proposal, setProposal] = useState<string>('');
     const [existingProposal, setExistingProposal] = useState<string>('');
     const [proposalChanged, setProposalChanged] = useState<boolean>(false);
+    const [customerRequest, setCustomerRequest] = useState<string>('');
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
+    const [materialLines, setMaterialLines] = useState<any[]>([]); // { id, materialId, name, unit, unitPrice, qty, lineTotal }
+    const [modalVisible, setModalVisible] = useState<boolean>(false);
 
     const normalize = (str: any) =>
         String(str || '')
@@ -75,6 +79,11 @@ const ProposalInspector: React.FC = () => {
                             } catch (e) {
                                 // ignore if form not ready
                             }
+                            // load materials catalog for material selector
+                            try {
+                                const mats = await getDocs(collection(db, 'material'));
+                                setMaterialsCatalog(mats.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+                            } catch (e) { /* ignore */ }
                     } else {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/inspector');
@@ -88,6 +97,43 @@ const ProposalInspector: React.FC = () => {
         };
         fetchData();
     }, [id, navigate]);
+
+    // Load existing repairordermaterial docs for this order and populate materialLines
+    useEffect(() => {
+        const loadExistingMaterials = async () => {
+            if (!orderData?.id) return;
+            try {
+                const matQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
+                const snap = await getDocs(matQuery);
+                if (!snap.empty) {
+                    const lines = snap.docs.map(d => {
+                        const data = d.data() as any;
+                        const mid = data.Material_ID || data.materialId || null;
+                        const qty = Number(data.QuantityUsed || data.quanityused || 0);
+                        const mCatalog = materialsCatalog.find(m => m.id === mid) || {};
+                        const unitPrice = mCatalog.Price || mCatalog.price || 0;
+                        return {
+                            // keep firestore doc id so we can delete/update later
+                            docId: d.id,
+                            id: Date.now() + Math.floor(Math.random() * 1000),
+                            materialId: mid,
+                            name: mCatalog.Name || mCatalog.name || '',
+                            unit: mCatalog.Unit || mCatalog.unit || '',
+                            unitPrice,
+                            qty,
+                            lineTotal: qty * unitPrice,
+                        };
+                    });
+                    setMaterialLines(lines);
+                }
+            } catch (e) {
+                // ignore load errors but keep UI usable
+                console.error('Failed to load existing repairordermaterial', e);
+            }
+        };
+        loadExistingMaterials();
+        // run when orderData or materialsCatalog changes (so names/prices can be resolved)
+    }, [orderData, materialsCatalog]);
 
     useEffect(() => {
         const fetchNames = async () => {
@@ -136,7 +182,35 @@ const ProposalInspector: React.FC = () => {
                 repairplan: proposal,
                 Status: 'Đã đề xuất phương án',
             });
-            
+            // Replace existing material docs for this order with the current materialLines.
+            try {
+                // Delete existing docs for this order first
+                const existingQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
+                const existingSnap = await getDocs(existingQuery);
+                for (const ed of existingSnap.docs) {
+                    try {
+                        await deleteDoc(doc(db, 'repairordermaterial', ed.id));
+                    } catch (innerE) {
+                        console.error('Failed to delete existing repairordermaterial doc', ed.id, innerE);
+                    }
+                }
+
+                // Add current lines
+                for (const m of materialLines) {
+                    if (!m.materialId) continue;
+                    await addDoc(collection(db, 'repairordermaterial'), {
+                        RepairOrder_ID: orderData.id,
+                        Material_ID: m.materialId,
+                        QuantityUsed: Number(m.qty) || 0,
+                        createdAt: serverTimestamp(),
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to save repairordermaterial', e);
+                // don't block the main proposal submission — show a warning
+                message.warning('Đề xuất văn bản thành công nhưng lưu vật liệu gặp lỗi (xem console).');
+            }
+
             message.success('Đã gửi đề xuất phương án thành công!');
             setTimeout(() => {
                 navigate('/inspector');
@@ -147,6 +221,20 @@ const ProposalInspector: React.FC = () => {
             setProposalLoading(false);
         }
     };
+
+    // Material modal helpers
+    const addMaterialLine = () => setMaterialLines(prev => [...prev, { id: Date.now(), materialId: null, name: '', unit: '', unitPrice: 0, qty: 1, lineTotal: 0 }]);
+    const updateMaterialLine = (idx: number, patch: any) => setMaterialLines(prev => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...patch };
+        next[idx].lineTotal = (Number(next[idx].qty) || 0) * (Number(next[idx].unitPrice) || 0);
+        return next;
+    });
+    const removeMaterialLine = (idx: number) => setMaterialLines(prev => prev.filter((_, i) => i !== idx));
+
+    const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+
+    // handle saving materials will be part of handleSubmitProposal to combine actions
 
 
     if (loading || !orderData) {
@@ -220,72 +308,131 @@ const ProposalInspector: React.FC = () => {
                     )}
                 </Descriptions>
 
-                <div className="mt-6">
-                    <Title level={4}>Hình ảnh</Title>
-                    <div className="flex gap-4 flex-wrap">
-                        {Object.values(imageList as { [key: string]: string }).map((url, index) => (
-                            <Image key={index} width={200} src={url} alt={`img-${index}`} />
-                        ))}
+                {/* Only show images section when there are images */}
+                {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
+                    <div className="mt-6">
+                        <Title level={4}>Hình ảnh</Title>
+                        <div className="flex gap-4 flex-wrap">
+                            {Object.values(imageList as { [key: string]: string }).filter(Boolean).map((url, index) => (
+                                <Image key={index} width={200} src={url} alt={`img-${index}`} />
+                            ))}
+                        </div>
                     </div>
-                </div>
+                )}
 
 
                 <div className="mt-8">
-                    <Title level={4}>Đề xuất phương án sửa chữa</Title>
-                    {/* If customer requested re-proposal, show their request */}
-                    {orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && (
-                        <div className="mb-4 max-w-2xl">
-                            <div className="font-medium">Yêu cầu điều chỉnh từ khách hàng</div>
-                            <div className="bg-yellow-50 p-3 rounded border border-yellow-200 whitespace-pre-line">
-                                <div className="text-sm text-gray-700">{orderData.CustomerAdjustmentRequest.text}</div>
-                            </div>
+                    
+                    {/* Customer adjustment request is now loaded into the proposal textarea inside the modal (if present) */}
+
+                    {/* Show a button that opens the modal containing the full proposal + materials form */}
+                    {orderData.Status !== 'Đã đề xuất phương án' && (
+                        <div className="mb-4">
+                            <Button
+                                type="primary"
+                                size="large"
+                                onClick={() => {
+                                    // If customer requested a re-proposal, show their request above the textarea (read-only)
+                                        if (orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && orderData.CustomerAdjustmentRequest.text) {
+                                            const reqText = orderData.CustomerAdjustmentRequest.text;
+                                            // keep customer's request separate from the editable proposal so the inspector edits the proposal itself
+                                            setCustomerRequest(reqText);
+                                            try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                        } else {
+                                            setCustomerRequest('');
+                                            try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                        }
+                                    setModalVisible(true);
+                                }}
+                            >
+                                Đề xuất
+                            </Button>
                         </div>
                     )}
 
-                    <Form
-                        form={form}
-                        layout="vertical"
-                        onFinish={handleSubmitProposal}
-                        className="max-w-2xl"
+                    <Modal
+                        title="Gửi đề xuất phương án sửa chữa"
+                        visible={modalVisible}
+                        onCancel={() => setModalVisible(false)}
+                        footer={null}
+                        destroyOnClose
                     >
-                        <Form.Item
-                            label="Phương án đề xuất"
-                            name="proposal"
-                            rules={[{ required: true, message: 'Vui lòng nhập phương án đề xuất!' }]}
+                        <Form
+                            form={form}
+                            layout="vertical"
+                            onFinish={async (vals) => {
+                                // ensure local proposal state is up-to-date
+                                setProposal(vals.proposal);
+                                await handleSubmitProposal(vals);
+                            }}
                         >
-                            <Input.TextArea 
-                                rows={6} 
-                                value={proposal}
-                                onChange={(e) => {
-                                    const v = e.target.value;
-                                    setProposal(v);
-                                    const prev = (existingProposal || '').toString().trim();
-                                    const cur = (v || '').toString().trim();
-                                    setProposalChanged(cur !== prev && cur.length > 0);
-                                }}
-                                placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..." 
-                            />
-                        </Form.Item>
+                            {/* If customer requested a re-proposal, show their request here (read-only, non-editable) */}
+                            {customerRequest && (
+                                // Show the card header and display the customer's request inside the card body (read-only)
+                                <Card size="small" title="Yêu cầu đề xuất của khách hàng" className="mb-4">
+                                    <div style={{ whiteSpace: 'pre-wrap', color: 'rgba(0,0,0,0.85)' }}>{customerRequest}</div>
+                                </Card>
+                            )}
 
-                        <Form.Item>
-                            {/* Hide send button when already proposed */}
-                            {orderData.Status !== 'Đã đề xuất phương án' && (
-                                    <Button
-                                        type="primary"
-                                        htmlType="submit"
-                                        loading={proposalLoading}
-                                        size="large"
-                                        disabled={(() => {
-                                            const statusNorm = normalize(orderData.Status);
-                                            const requireChange = new Set([normalize('yêu cầu đề xuất lại'), normalize('đang giám định')]);
-                                            return requireChange.has(statusNorm) ? !proposalChanged : false;
-                                        })()}
-                                    >
-                                        Gửi đề xuất phương án
-                                    </Button>
-                                )}
-                        </Form.Item>
-                    </Form>
+                            <Form.Item
+                                label="Phương án đề xuất"
+                                name="proposal"
+                                rules={[{ required: true, message: 'Vui lòng nhập phương án đề xuất!' }]}
+                            >
+                                <Input.TextArea
+                                    rows={6}
+                                    value={proposal}
+                                    onChange={(e) => {
+                                        const v = e.target.value;
+                                        setProposal(v);
+                                        const prev = (existingProposal || '').toString().trim();
+                                        const cur = (v || '').toString().trim();
+                                        setProposalChanged(cur !== prev && cur.length > 0);
+                                    }}
+                                    placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..."
+                                />
+                            </Form.Item>
+
+                            <Form.Item>
+                                <Card size="small" title="Vật liệu đề xuất" className="mb-4">
+                                    <div className="mb-2">
+                                        <Button type="dashed" onClick={addMaterialLine}>+ Thêm vật liệu</Button>
+                                    </div>
+                                    {materialLines.map((line, idx) => (
+                                        <Row key={line.id} gutter={8} className="mb-2">
+                                            <Col span={12}>
+                                                <Select
+                                                    showSearch
+                                                    placeholder="Chọn vật liệu"
+                                                    value={line.materialId}
+                                                    onChange={(val) => {
+                                                        const m = materialsCatalog.find(x => x.id === val) || { Name: '', Unit: '', Price: 0 };
+                                                        updateMaterialLine(idx, { materialId: val, name: m.Name || m.name || '', unit: m.Unit || m.unit || '', unitPrice: m.Price || m.price || 0 });
+                                                    }}
+                                                    options={materialsCatalog.map(m => ({ label: m.Name || m.name, value: m.id }))}
+                                                />
+                                            </Col>
+                                            <Col span={6}>
+                                                <InputNumber min={0} style={{ width: '100%' }} value={line.qty} onChange={(v) => updateMaterialLine(idx, { qty: v || 0 })} />
+                                            </Col>
+                                            <Col span={4}>
+                                                <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                            </Col>
+                                            <Col span={2}>
+                                                <Button danger size="small" onClick={() => removeMaterialLine(idx)}>Xóa</Button>
+                                            </Col>
+                                        </Row>
+                                    ))}
+                                    <div className="text-right font-medium">Tổng vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                                </Card>
+
+                                <div style={{ textAlign: 'right' }}>
+                                    <Button style={{ marginRight: 8 }} onClick={() => setModalVisible(false)}>Hủy</Button>
+                                    <Button type="primary" htmlType="submit" loading={proposalLoading}>Gửi đề xuất phương án</Button>
+                                </div>
+                            </Form.Item>
+                        </Form>
+                    </Modal>
                 </div>
         </InspectorLayout>
     );

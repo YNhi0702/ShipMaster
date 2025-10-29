@@ -175,14 +175,16 @@ const OrderDetailDone: React.FC = () => {
                 </div>
             )}
 
-            <div className="mt-6">
-                <Title level={4}>Hình ảnh</Title>
-                <div className="flex gap-4 flex-wrap">
-                    {Object.values(imageList as { [key: string]: string }).map((url, index) => (
-                        <Image key={index} width={200} src={url} alt={`img-${index}`} />
-                    ))}
+            {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
+                <div className="mt-6">
+                    <Title level={4}>Hình ảnh</Title>
+                    <div className="flex gap-4 flex-wrap">
+                        {Object.values(imageList as { [key: string]: string }).filter(Boolean).map((url, index) => (
+                            <Image key={index} width={200} src={url} alt={`img-${index}`} />
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
         </InspectorLayout>
     );
 };
