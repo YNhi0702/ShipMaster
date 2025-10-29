@@ -210,11 +210,6 @@ const InspectorHome: React.FC = () => {
             render: (_: any, __: any, index: number) => index + 1,
         },
         {
-            title: 'Mã đơn',
-            dataIndex: 'id',
-            key: 'id',
-        },
-        {
             title: 'Ngày tạo',
             dataIndex: 'createdAt',
             key: 'createdAt',
@@ -223,23 +218,25 @@ const InspectorHome: React.FC = () => {
             title: 'Tàu',
             dataIndex: 'shipName',
             key: 'shipName',
+            render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
         },
         {
             title: 'Xưởng',
             dataIndex: 'workshopName',
             key: 'workshopName',
+            render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
         },
         {
             title: 'Cán bộ giám định',
             dataIndex: 'assignedInspector',
             key: 'assignedInspector',
-            render: (inspector: string) => inspector || 'Chưa được gán',
+            render: (inspector: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{inspector || 'Chưa được gán'}</div>,
         },
         {
             title: 'Mô tả',
             dataIndex: 'description',
             key: 'description',
-            render: (desc: string) => <span title={desc}>{desc}</span>,
+            render: (desc: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{desc}</div>,
         },
         {
             title: 'Hành động',
@@ -280,11 +277,6 @@ const InspectorHome: React.FC = () => {
             }
         },
         {
-            title: 'Mã đơn',
-            dataIndex: 'id',
-            key: 'id',
-        },
-        {
             title: 'Ngày tạo',
             dataIndex: 'createdAt',
             key: 'createdAt',
@@ -293,23 +285,25 @@ const InspectorHome: React.FC = () => {
             title: 'Tàu',
             dataIndex: 'shipName',
             key: 'shipName',
+            render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
         },
         {
             title: 'Xưởng',
             dataIndex: 'workshopName',
             key: 'workshopName',
+            render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
         },
         {
             title: 'Cán bộ giám định',
             dataIndex: 'assignedInspector',
             key: 'assignedInspector',
-            render: (inspector: string) => inspector || 'Chưa được gán',
+            render: (inspector: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{inspector || 'Chưa được gán'}</div>,
         },
         {
             title: 'Mô tả',
             dataIndex: 'description',
             key: 'description',
-            render: (desc: string) => <span title={desc}>{desc}</span>,
+            render: (desc: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{desc}</div>,
         },
         {
             title: 'Hành động',
@@ -374,7 +368,6 @@ const InspectorHome: React.FC = () => {
                                     loading={loadingOrders || refreshing}
                                     bordered
                                     className="shadow-sm"
-                                    scroll={{ x: 'max-content' }}
                                 />
                             </div>
                         </>
@@ -390,7 +383,6 @@ const InspectorHome: React.FC = () => {
                                     loading={loadingOrders || refreshing}
                                     bordered
                                     className="shadow-sm"
-                                    scroll={{ x: 'max-content' }}
                                 />
                             </div>
                         </>
@@ -407,7 +399,6 @@ const InspectorHome: React.FC = () => {
                                     loading={loadingOrders || refreshing}
                                     bordered
                                     className="shadow-sm"
-                                    scroll={{ x: 'max-content' }}
                                 />
                             </div>
                         </>

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar, Dropdown } from 'antd';
+import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar, Dropdown, Popconfirm } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Modal, Form, Input, Row, Col, Card } from 'antd';
@@ -127,6 +127,56 @@ const OrderDetail: React.FC = () => {
         loadExisting();
     }, [orderData, materialsCatalog]);
 
+    // load ship/workshop/inspector names for display (customer view)
+    useEffect(() => {
+        const fetchNames = async () => {
+            if (!orderData) return;
+
+            // Ship name
+            try {
+                if (orderData.shipId) {
+                    const shipSnap = await getDoc(doc(db, 'ship', orderData.shipId));
+                    setShipName(shipSnap.exists() ? shipSnap.data().name : 'Không xác định');
+                } else if (orderData.shipName) {
+                    setShipName(orderData.shipName);
+                } else {
+                    setShipName('Không xác định');
+                }
+            } catch {
+                setShipName('Không xác định');
+            }
+
+            // Workshop name
+            try {
+                if (orderData.workshopId) {
+                    const wsSnap = await getDoc(doc(db, 'workShop', orderData.workshopId));
+                    setWorkshopName(wsSnap.exists() ? wsSnap.data().name : 'Không xác định');
+                } else if (orderData.workshopName) {
+                    setWorkshopName(orderData.workshopName);
+                } else {
+                    setWorkshopName('');
+                }
+            } catch {
+                setWorkshopName('');
+            }
+
+            // Inspector / assigned employee name (optional)
+            try {
+                if (orderData.inspectorId) {
+                    const employeeSnap = await getDoc(doc(db, 'employees', orderData.inspectorId));
+                    setEmployeeName(employeeSnap.exists() ? (employeeSnap.data().fullName || employeeSnap.data().UserName || orderData.inspectorId) : orderData.inspectorId);
+                } else if (orderData.assignedInspector) {
+                    setEmployeeName(orderData.assignedInspector);
+                } else {
+                    setEmployeeName('');
+                }
+            } catch {
+                setEmployeeName(orderData.inspectorId || orderData.assignedInspector || '');
+            }
+        };
+        fetchNames();
+    }, [orderData]);
+
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
 
     const handleSubmitProposalFromModal = async () => {
@@ -181,12 +231,14 @@ const OrderDetail: React.FC = () => {
             .trim();
 
     const statusNorm = normalize(Status);
+    const isProposed = statusNorm === normalize('đã đề xuất phương án');
     const showCancelFor = new Set([
         normalize('chờ giám định'),
         normalize('đang giám định'),
         normalize('đã đề xuất phương án'),
         normalize('yêu cầu đề xuất lại'),
     ]);
+    const canCancel = showCancelFor.has(statusNorm);
 
     // 👉 Menu dropdown đăng xuất
     const menuItems = [
@@ -244,18 +296,46 @@ const OrderDetail: React.FC = () => {
         }
     };
 
+    const handleCancelOrder = async () => {
+        if (!id) return;
+        setCanceling(true);
+        try {
+            // delete related repairordermaterial documents first
+            try {
+                const existingQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', id));
+                const existingSnap = await getDocs(existingQuery);
+                for (const ed of existingSnap.docs) {
+                    try { await deleteDoc(doc(db, 'repairordermaterial', ed.id)); } catch (e) { console.warn('Failed to delete repairordermaterial', e); }
+                }
+            } catch (e) {
+                console.warn('Failed to clean up repairordermaterial', e);
+            }
+
+            // delete the repairOrder document
+            await deleteDoc(doc(db, 'repairOrder', id));
+            message.success('Đã xóa đơn hàng.');
+            navigate('/');
+        } catch (e) {
+            console.error('Cancel failed', e);
+            message.error('Lỗi khi huỷ đơn.');
+        } finally {
+            setCanceling(false);
+        }
+    };
+
     return (
         <CustomerLayout userName={userName} loadingUser={loadingUser}>
                 <div className="flex justify-between items-center mb-4">
                     <Title level={4} className="m-0">Chi tiết đơn sửa chữa</Title>
-                    <Button onClick={() => navigate(-1)}>Quay lại</Button>
+                    <div className="flex items-center gap-3">
+                        <Button onClick={() => navigate(-1)}>Quay lại</Button>
+                    </div>
                 </div>
 
                 <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Mã đơn">{id}</Descriptions.Item>
+                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
                     <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
-                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                     <Descriptions.Item label="Cán bộ giám định">{employeeName || 'Chưa được gán'}</Descriptions.Item>
                     <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
                     {description && <Descriptions.Item label="Mô tả">{description}</Descriptions.Item>}
@@ -263,58 +343,64 @@ const OrderDetail: React.FC = () => {
 
                 {repairplan && (
                     <div className="mt-6">
-                        <div className="flex items-start justify-between">
+                        <div className="flex justify-between items-start">
                             <Title level={4} className="m-0">Phương án sửa chữa</Title>
-                            <div className="flex gap-2">
-                                <Button onClick={() => {
-                                    // preload proposal text and open modal
-                                    const toLoad = orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest?.text
-                                        ? orderData.CustomerAdjustmentRequest.text
-                                        : repairplan || '';
-                                    setProposalText(toLoad);
-                                    setProposalModalVisible(true);
-                                }}>Xem đề xuất</Button>
-                            </div>
-                        </div>
-                    </div>
-                )}
 
-                {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
-                    <div className="mt-6">
-                        <Title level={4}>Hình ảnh</Title>
-                        <div className="flex gap-4 flex-wrap">
-                            {Object.values(imageList as { [key: string]: string }).filter(Boolean).map((url, index) => (
-                                <Image key={index} width={200} src={url} alt={`img-${index}`} />
+                            {isProposed && (
+                                <div className="flex gap-3">
+                                    <Button type="primary" loading={accepting} onClick={handleAcceptRepair}>Đồng ý</Button>
+                                    <Button onClick={() => setReproposalModalVisible(true)}>Đề xuất lại</Button>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="mt-3">
+                            <Input.TextArea rows={6} value={repairplan || ''} readOnly />
+                        </div>
+
+                        <Card size="small" title="Vật liệu đề xuất" className="mt-4">
+                            <Row gutter={8} className="mb-2 font-medium">
+                                <Col span={12}><div>Tên</div></Col>
+                                <Col span={6}><div>Số lượng</div></Col>
+                                <Col span={4}><div>Chi phí</div></Col>
+                                <Col span={2} />
+                            </Row>
+
+                            {materialLines.map((line, idx) => (
+                                <Row key={line.id || idx} gutter={8} className="mb-2">
+                                    <Col span={12}>
+                                        <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                    </Col>
+                                    <Col span={6}>
+                                        <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                    </Col>
+                                    <Col span={4}>
+                                        <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                    </Col>
+                                    <Col span={2} />
+                                </Row>
                             ))}
-                        </div>
+
+                            <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                        </Card>
+
+                        {/* Cancel button moved to page bottom so it's visible regardless of repairplan */}
                     </div>
                 )}
 
-                <div className="mt-6 flex justify-end">
-                    {showCancelFor.has(statusNorm) && (
-                        <Button
-                            danger
-                            loading={canceling}
-                            onClick={async () => {
-                                if (!id) return;
-                                const ok = window.confirm('Bạn có chắc chắn muốn huỷ đơn sửa chữa này?');
-                                if (!ok) return;
-                                setCanceling(true);
-                                try {
-                                    await deleteDoc(doc(db, 'repairOrder', id));
-                                    message.success('Đã xóa đơn sửa chữa.');
-                                    navigate('/');
-                                } catch {
-                                    message.error('Không thể xóa đơn.');
-                                } finally {
-                                    setCanceling(false);
-                                }
-                            }}
+                {/* Page-level cancel button (bottom of content) */}
+                {canCancel && (
+                    <div className="mt-8 flex justify-end">
+                        <Popconfirm
+                            title="Bạn có chắc muốn xoá đơn này? Hành động này không thể hoàn tác."
+                            onConfirm={handleCancelOrder}
+                            okText="Xoá"
+                            cancelText="Huỷ"
                         >
-                            Hủy đơn
-                        </Button>
-                    )}
-                </div>
+                            <Button danger loading={canceling}>Hủy đơn</Button>
+                        </Popconfirm>
+                    </div>
+                )}
                 <Modal
                     title="Phương án sửa chữa đơn hàng"
                     visible={proposalModalVisible}
@@ -357,9 +443,7 @@ const OrderDetail: React.FC = () => {
                             </Card>
 
                             <div style={{ textAlign: 'right' }}>
-                                <Button style={{ marginRight: 8 }} onClick={() => setProposalModalVisible(false)}>Đóng</Button>
-                                <Button type="primary" loading={accepting} onClick={async () => { setProposalModalVisible(false); await handleAcceptRepair(); }}>Đồng ý</Button>
-                                <Button style={{ marginLeft: 8 }} loading={reproposalSubmitting} onClick={() => { setProposalModalVisible(false); setReproposalModalVisible(true); }}>Đề xuất lại</Button>
+                                <Button onClick={() => setProposalModalVisible(false)}>Đóng</Button>
                             </div>
                         </Form.Item>
                     </Form>

@@ -211,10 +211,18 @@ const ProposalInspector: React.FC = () => {
                 message.warning('Đề xuất văn bản thành công nhưng lưu vật liệu gặp lỗi (xem console).');
             }
 
+            // update total cost on the repairOrder so workshop can see computed total
+            try {
+                await updateDoc(doc(db, 'repairOrder', orderData.id), {
+                    totalCost: Number(materialsCost) || 0,
+                });
+            } catch (e) {
+                console.error('Failed to update repairOrder.totalCost', e);
+            }
+
             message.success('Đã gửi đề xuất phương án thành công!');
-            setTimeout(() => {
-                navigate('/inspector');
-            }, 1500);
+            // Navigate to inspector home and open the 'proposal' tab
+            navigate('/inspector?tab=proposal', { replace: true });
         } catch (e) {
             message.error('Lỗi khi gửi đề xuất.');
         } finally {
@@ -265,10 +273,9 @@ const ProposalInspector: React.FC = () => {
                         <Button onClick={() => navigate(-1)}>Quay lại</Button>
                     </div>
                 <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Mã đơn">{id}</Descriptions.Item>
+                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
                     <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
-                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                     <Descriptions.Item label="Cán bộ giám định">{orderData.assignedInspector || employeeName || 'Chưa được gán'}</Descriptions.Item>
                     <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
                     {orderData.description && (
@@ -322,6 +329,41 @@ const ProposalInspector: React.FC = () => {
 
 
                 <div className="mt-8">
+                    {/* If order already has a submitted proposal, show it (read-only) */}
+                    {orderData.Status === 'Đã đề xuất phương án' && (
+                        <div className="mb-6">
+                            <Title level={5}>Phương án đã đề xuất</Title>
+                            <div className="mt-3">
+                                <Input.TextArea rows={6} value={existingProposal || ''} readOnly />
+                            </div>
+
+                            <Card size="small" title="Vật liệu đề xuất" className="mt-4">
+                                <Row gutter={8} className="mb-2 font-medium">
+                                    <Col span={12}><div>Tên</div></Col>
+                                    <Col span={6}><div>Số lượng</div></Col>
+                                    <Col span={4}><div>Chi phí</div></Col>
+                                    <Col span={2} />
+                                </Row>
+
+                                {materialLines.map((line, idx) => (
+                                    <Row key={line.id || idx} gutter={8} className="mb-2">
+                                        <Col span={12}>
+                                            <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                        </Col>
+                                        <Col span={6}>
+                                            <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                        </Col>
+                                        <Col span={4}>
+                                            <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                        </Col>
+                                        <Col span={2} />
+                                    </Row>
+                                ))}
+
+                                <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                            </Card>
+                        </div>
+                    )}
                     
                     {/* Customer adjustment request is now loaded into the proposal textarea inside the modal (if present) */}
 

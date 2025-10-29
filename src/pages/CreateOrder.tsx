@@ -115,6 +115,7 @@ const CreateOrder: React.FC = () => {
                 invoiceId: '',
                 shipId: shipId,
                 totalCostId: 0,
+                totalCost: 0,
                 uid: uid,
                 workshopId: values.workshopId,
                 repairplan: '',

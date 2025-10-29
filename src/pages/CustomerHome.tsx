@@ -76,19 +76,14 @@ const CustomerHome: React.FC = () => {
 
     const columns = [
         {
-            title: 'Mã đơn',
-            dataIndex: 'id',
-            key: 'id',
+            title: 'Tàu',
+            dataIndex: 'shipName',
+            key: 'shipName',
         },
         {
             title: 'Ngày tạo',
             dataIndex: 'createdAt',
             key: 'createdAt',
-        },
-        {
-            title: 'Tàu',
-            dataIndex: 'shipName',
-            key: 'shipName',
         },
         {
             title: 'Trạng thái',

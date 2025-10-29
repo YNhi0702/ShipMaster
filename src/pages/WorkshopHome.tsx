@@ -305,10 +305,9 @@ const WorkshopHome: React.FC = () => {
             width: 60,
             render: (_: any, __: any, index: number) => index + 1,
         },
-        { title: 'Mã đơn', dataIndex: 'id', key: 'id' },
-        { title: 'Ngày tạo', dataIndex: 'createdAt', key: 'createdAt' },
-        { title: 'Tàu', dataIndex: 'shipName', key: 'shipName' },
-        { title: 'Trạng thái', dataIndex: 'Status', key: 'Status' },
+    { title: 'Ngày tạo', dataIndex: 'createdAt', key: 'createdAt' },
+    { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+    { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
         {
             title: 'Hành động',
             key: 'action',
@@ -326,9 +325,8 @@ const WorkshopHome: React.FC = () => {
     { title: 'Ngày', dataIndex: 'date', key: 'date' },
     { title: 'Lịch bắt đầu', dataIndex: 'scheduleStart', key: 'scheduleStart' },
     { title: 'Lịch kết thúc', dataIndex: 'scheduleEnd', key: 'scheduleEnd' },
-        { title: 'Mã đơn', dataIndex: 'id', key: 'id' },
-    { title: 'Tàu', dataIndex: 'shipName', key: 'shipName' },
-    { title: 'Trạng thái', dataIndex: 'Status', key: 'Status' },
+    { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+    { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
         {
             title: 'Hành động', key: 'action', render: (_: any, record: any) => {
                 // consider it 'has schedule' only if BOTH schedule fields exist
@@ -417,8 +415,8 @@ const WorkshopHome: React.FC = () => {
     // apply schedule-specific text and date filters
     const normalizedScheduleSearch = (scheduleSearch || '').toString().toLowerCase().trim();
     const filteredScheduleRowsWithSearch = filteredScheduleRows.filter((r) => {
-        // text matching across id, shipName, Status, createdAt
-        const hay = `${r.id || ''} ${r.shipName || ''} ${r.Status || ''} ${r.createdAt || ''}`.toLowerCase();
+        // text matching across shipName, Status, createdAt (exclude id)
+        const hay = `${r.shipName || ''} ${r.Status || ''} ${r.createdAt || ''}`.toLowerCase();
         const textMatch = !normalizedScheduleSearch || hay.includes(normalizedScheduleSearch);
 
         // date range filter (if provided)
@@ -447,8 +445,8 @@ const WorkshopHome: React.FC = () => {
     const normalizedOrderSearch = (orderSearch || '').toString().toLowerCase().trim();
     const filteredOrders = orders.filter((o) => {
         if (!normalizedOrderSearch) return true;
-        // intentionally exclude date from Orders search — only id, shipName and Status
-        const hay = `${o.id || ''} ${o.shipName || ''} ${o.Status || ''}`.toLowerCase();
+        // search only shipName and Status (exclude id)
+        const hay = `${o.shipName || ''} ${o.Status || ''}`.toLowerCase();
         return hay.includes(normalizedOrderSearch);
     });
 
@@ -475,7 +473,7 @@ const WorkshopHome: React.FC = () => {
                                 notFoundContent={workshops.length === 0 ? 'Không có xưởng' : undefined}
                             />
                             <Input.Search
-                                placeholder="Tìm theo mã đơn, tàu, trạng thái"
+                                placeholder="Tìm theo tàu, trạng thái"
                                 allowClear
                                 onSearch={(v) => setOrderSearch(v)}
                                 onChange={(e) => setOrderSearch(e.target.value)}
@@ -512,7 +510,7 @@ const WorkshopHome: React.FC = () => {
                             notFoundContent={workshops.length === 0 ? 'Không có xưởng' : undefined}
                         />
                         <Input.Search
-                            placeholder="Tìm theo mã đơn, tàu, trạng thái..."
+                            placeholder="Tìm theo tàu, trạng thái..."
                             allowClear
                             onSearch={(v) => setScheduleSearch(v)}
                             onChange={(e) => setScheduleSearch(e.target.value)}

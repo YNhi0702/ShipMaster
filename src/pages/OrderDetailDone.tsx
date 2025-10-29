@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Typography, Descriptions, Image, Button, Spin, message } from 'antd';
+import { Typography, Descriptions, Image, Button, Spin, message, Card, Row, Col } from 'antd';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import InspectorLayout from '../components/InspectorLayout';
@@ -16,6 +16,8 @@ const OrderDetailDone: React.FC = () => {
     const [shipInfo, setShipInfo] = useState<any | null>(null);
     const [workshopName, setWorkshopName] = useState('');
     const [employeeName, setEmployeeName] = useState('');
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
+    const [materialLines, setMaterialLines] = useState<any[]>([]);
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
 
@@ -105,6 +107,47 @@ const OrderDetailDone: React.FC = () => {
         fetchNames();
     }, [orderData]);
 
+    // load material catalog and repair order materials for display
+    useEffect(() => {
+        const loadMaterials = async () => {
+            if (!orderData?.id) return;
+            try {
+                const matsSnap = await getDocs(collection(db, 'material'));
+                const catalog = matsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                setMaterialsCatalog(catalog);
+
+                const q = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
+                const snap = await getDocs(q);
+                if (!snap.empty) {
+                    const lines = snap.docs.map(d => {
+                        const data = d.data() as any;
+                        const mid = data.Material_ID || data.materialId || null;
+                        const qty = Number(data.QuantityUsed || data.quanityused || 0);
+                        const m = catalog.find(c => c.id === mid) || {};
+                        const unitPrice = Number(m.Price || m.price || 0);
+                        return {
+                            id: d.id,
+                            materialId: mid,
+                            name: m.Name || m.name || mid || 'Vật liệu',
+                            unit: m.Unit || m.unit || '',
+                            qty,
+                            unitPrice,
+                            lineTotal: qty * unitPrice,
+                        };
+                    });
+                    setMaterialLines(lines);
+                } else {
+                    setMaterialLines([]);
+                }
+            } catch (e) {
+                console.error('Failed to load materials for order', e);
+            }
+        };
+        loadMaterials();
+    }, [orderData]);
+
+    const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+
     if (loading || !orderData) return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
 
     const { createdAt, Status, description, imageList = {}, repairplan, proposal } = orderData;
@@ -172,6 +215,35 @@ const OrderDetailDone: React.FC = () => {
                 <div className="mt-8 max-w-xl">
                     <Title level={4}>Phương án đã đề xuất</Title>
                     <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line">{repairplan || proposal}</div>
+
+                    {/* Materials breakdown (if any) */}
+                    {materialLines.length > 0 && (
+                        <Card size="small" title="Vật liệu đề xuất" className="mt-4">
+                            <Row gutter={8} className="mb-2 font-medium">
+                                <Col span={12}><div>Tên</div></Col>
+                                <Col span={6}><div>Số lượng</div></Col>
+                                <Col span={4}><div>Chi phí</div></Col>
+                                <Col span={2} />
+                            </Row>
+
+                            {materialLines.map((line, idx) => (
+                                <Row key={line.id || idx} gutter={8} className="mb-2">
+                                    <Col span={12}>
+                                        <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                    </Col>
+                                    <Col span={6}>
+                                        <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                    </Col>
+                                    <Col span={4}>
+                                        <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                    </Col>
+                                    <Col span={2} />
+                                </Row>
+                            ))}
+
+                            <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                        </Card>
+                    )}
                 </div>
             )}
 

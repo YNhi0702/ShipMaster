@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { Descriptions, Spin, Button, Typography, message } from 'antd';
+import { Descriptions, Spin, Button, Typography, message, Row, Col, Card, Input } from 'antd';
 import moment from 'moment';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -18,6 +18,8 @@ const OrderInfo: React.FC = () => {
     const [customer, setCustomer] = useState<any | null>(null);
     const [workshopName, setWorkshopName] = useState<string | null>(null);
     const [headerName, setHeaderName] = useState<string>('');
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
+    const [materialLines, setMaterialLines] = useState<any[]>([]);
 
     useEffect(() => {
         const load = async () => {
@@ -132,6 +134,40 @@ const OrderInfo: React.FC = () => {
                 } catch (e) {
                     // ignore
                 }
+
+                // load material catalog (for price/name lookup) and then repairordermaterial
+                try {
+                    const matsSnap = await getDocs(collection(db, 'material'));
+                    const mats = matsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                    setMaterialsCatalog(mats);
+
+                    if (orderData?.id) {
+                        const q = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
+                        const snap = await getDocs(q);
+                        if (!snap.empty) {
+                            const lines = snap.docs.map(d => {
+                                const data = d.data() as any;
+                                const mid = data.Material_ID || data.materialId || null;
+                                const qty = Number(data.QuantityUsed || data.quanityused || 0);
+                                const mCatalog = (Array.isArray(mats) ? mats.find(m => m.id === mid) : undefined) || {};
+                                const unitPrice = mCatalog.Price || mCatalog.price || 0;
+                                return {
+                                    docId: d.id,
+                                    id: Date.now() + Math.floor(Math.random() * 1000) + Math.floor(Math.random() * 1000),
+                                    materialId: mid,
+                                    name: mCatalog.Name || mCatalog.name || '',
+                                    unit: mCatalog.Unit || mCatalog.unit || '',
+                                    unitPrice,
+                                    qty,
+                                    lineTotal: qty * unitPrice,
+                                };
+                            });
+                            setMaterialLines(lines);
+                        }
+                    }
+                } catch (e) {
+                    // ignore
+                }
             } catch (err) {
                 console.error(err);
                 message.error('Lỗi khi tải thông tin đơn');
@@ -146,7 +182,8 @@ const OrderInfo: React.FC = () => {
 
     return (
         <WorkshopLayout selectedKey="orders" onSelect={(k) => { if (k === 'schedule') navigate('/workshop?tab=schedule'); else navigate('/workshop'); }} userName={headerName} loadingUser={false}>
-            <div>
+            {/* make content full-bleed within the WorkshopLayout by canceling the outer margins (m-6 -> 24px) */}
+            <div style={{ marginLeft: '-24px', marginRight: '-24px', width: 'calc(100% + 48px)' }}>
                 <div className="flex items-center justify-between mb-4">
                     <Title level={4} className="m-0">Thông tin chi tiết đơn sửa chữa</Title>
                     <Button onClick={() => navigate(-1)}>Quay lại</Button>
@@ -157,6 +194,7 @@ const OrderInfo: React.FC = () => {
                     <Descriptions.Item label="Trạng thái">{order?.Status || order?.status || '—'}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">{order?.StartDate ? (order.StartDate.toDate ? moment(order.StartDate.toDate()).format('DD/MM/YYYY HH:mm') : moment(order.StartDate).format('DD/MM/YYYY HH:mm')) : (order?.createdAt || '—')}</Descriptions.Item>
                     <Descriptions.Item label="Tóm tắt hỏng hóc">{order?.Description || order?.description || order?.RepairContent || '—'}</Descriptions.Item>
+                    <Descriptions.Item label="Tổng chi phí">{(order?.totalCost !== undefined && order?.totalCost !== null) ? Number(order.totalCost).toLocaleString('vi-VN') + ' đ' : (materialLines.length > 0 ? materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN') + ' đ' : '—')}</Descriptions.Item>
                 </Descriptions>
 
                 <div style={{ height: 16 }} />
@@ -202,6 +240,56 @@ const OrderInfo: React.FC = () => {
                 <Descriptions title="Thông tin xưởng" bordered column={1}>
                     <Descriptions.Item label="Xưởng">{workshopName || '—'}</Descriptions.Item>
                 </Descriptions>
+
+                {((order as any)?.repairplan || materialLines.length > 0) && (
+                    <div className="mt-6 w-full">
+                        {(order as any)?.repairplan && (
+                            <div>
+                                <div className="flex justify-between items-start">
+                                    <Title level={4} className="m-0">Phương án sửa chữa</Title>
+                                </div>
+
+                                <div className="mt-3 w-full">
+                                    <Input.TextArea rows={6} value={(order as any).repairplan || ''} readOnly style={{ width: '100%' }} />
+                                </div>
+                            </div>
+                        )}
+
+                        {materialLines.length > 0 && (
+                            <Card size="small" title="Vật liệu đề xuất" className="mt-4" style={{ width: '100%' }}>
+                                <Row gutter={8} className="mb-2 font-medium">
+                                    <Col span={10}><div>Tên</div></Col>
+                                    <Col span={4}><div>Đơn vị</div></Col>
+                                    <Col span={4}><div>Số lượng</div></Col>
+                                    <Col span={4}><div>Đơn giá</div></Col>
+                                    <Col span={2}><div>Tổng</div></Col>
+                                </Row>
+
+                                {materialLines.map((line, idx) => (
+                                    <Row key={line.id || idx} gutter={8} className="mb-2">
+                                        <Col span={10}>
+                                            <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                        </Col>
+                                        <Col span={4}>
+                                            <div style={{ paddingTop: 6 }}>{line.unit || '-'}</div>
+                                        </Col>
+                                        <Col span={4}>
+                                            <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                        </Col>
+                                        <Col span={4}>
+                                            <div style={{ paddingTop: 6 }}>{(Number(line.unitPrice) || 0).toLocaleString('vi-VN')} đ</div>
+                                        </Col>
+                                        <Col span={2}>
+                                            <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                        </Col>
+                                    </Row>
+                                ))}
+
+                                <div className="text-right font-medium">Tổng chi phí: {materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN')} đ</div>
+                            </Card>
+                        )}
+                    </div>
+                )}
             </div>
         </WorkshopLayout>
     );
