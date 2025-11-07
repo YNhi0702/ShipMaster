@@ -5,6 +5,8 @@ import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firesto
 import { db } from '../firebase';
 import InspectorLayout from '../components/InspectorLayout';
 
+const LABOR_DAY_RATE = 350000; // đơn giá theo ngày công
+
 const { Title } = Typography;
 
 const OrderDetailDone: React.FC = () => {
@@ -20,6 +22,7 @@ const OrderDetailDone: React.FC = () => {
     const [materialLines, setMaterialLines] = useState<any[]>([]);
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
+    const [laborLines, setLaborLines] = useState<any[]>([]);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -146,7 +149,38 @@ const OrderDetailDone: React.FC = () => {
         loadMaterials();
     }, [orderData]);
 
+    // load repair order labor lines for display
+    useEffect(() => {
+        const loadLabor = async () => {
+            if (!orderData?.id) return;
+            try {
+                const labQ = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
+                const snap = await getDocs(labQ);
+                if (!snap.empty) {
+                    const lines = snap.docs.map(d => {
+                        const data = d.data() as any;
+                        const days = Math.max(1, Number(data.Days ?? data.Quantity ?? 0) || 1);
+                        return {
+                            id: d.id,
+                            employeeId: data.Employee_ID || data.employeeId || '',
+                            employeeName: data.EmployeeName || data.employeeName || '',
+                            description: data.Description || data.description || '',
+                            days,
+                        };
+                    });
+                    setLaborLines(lines);
+                } else {
+                    setLaborLines([]);
+                }
+            } catch (e) {
+                console.error('Failed to load labor for order', e);
+            }
+        };
+        loadLabor();
+    }, [orderData]);
+
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
 
     if (loading || !orderData) return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
 
@@ -241,8 +275,33 @@ const OrderDetailDone: React.FC = () => {
                                 </Row>
                             ))}
 
-                            <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                            <div className="text-right font-medium">Chi phí vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
                         </Card>
+                    )}
+
+                    {/* Labor breakdown (if any) */}
+                    {laborLines.length > 0 && (
+                        <Card size="small" title="Nhân công đề xuất" className="mt-4">
+                            <Row gutter={8} className="mb-2 font-medium">
+                                <Col span={8}><div>Nhân viên</div></Col>
+                                <Col span={8}><div>Công việc</div></Col>
+                                <Col span={4}><div>Số ngày</div></Col>
+                                <Col span={4}><div>Chi phí</div></Col>
+                            </Row>
+                            {laborLines.map((line, idx) => (
+                                <Row key={line.id || idx} gutter={8} className="mb-2">
+                                    <Col span={8}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
+                                    <Col span={8}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
+                                    <Col span={4}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                    <Col span={4}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                </Row>
+                            ))}
+                            <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
+                        </Card>
+                    )}
+
+                    {(materialLines.length > 0 || laborLines.length > 0) && (
+                        <div className="text-right font-semibold mt-2">Tổng chi phí: {(materialsCost + laborCost).toLocaleString('vi-VN')} đ</div>
                     )}
                 </div>
             )}

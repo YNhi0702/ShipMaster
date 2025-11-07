@@ -10,6 +10,7 @@ import InspectorLayout from '../components/InspectorLayout';
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { TextArea } = Input;
+const LABOR_DAY_RATE = 350000; // đơn giá ngày công cố định
 
 
 const ProposalInspector: React.FC = () => {
@@ -30,8 +31,16 @@ const ProposalInspector: React.FC = () => {
     const [userName, setUserName] = useState('');
     const [loadingUser, setLoadingUser] = useState(true);
     const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
+    // Saved (đã tải từ Firestore)
+    const [savedMaterialLines, setSavedMaterialLines] = useState<any[]>([]);
+    const [savedLaborLines, setSavedLaborLines] = useState<any[]>([]);
+    // Draft (đang chỉnh trong modal, chưa lưu Firestore)
     const [materialLines, setMaterialLines] = useState<any[]>([]); // { id, materialId, name, unit, unitPrice, qty, lineTotal }
     const [modalVisible, setModalVisible] = useState<boolean>(false);
+    const [laborLines, setLaborLines] = useState<any[]>([]); // { id, employeeId?, employeeName?, description, days }
+    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string }>>([]);
+    const [loadingEmployees, setLoadingEmployees] = useState<boolean>(false);
+    const [submitAttempted, setSubmitAttempted] = useState<boolean>(false);
 
     const normalize = (str: any) =>
         String(str || '')
@@ -98,7 +107,7 @@ const ProposalInspector: React.FC = () => {
         fetchData();
     }, [id, navigate]);
 
-    // Load existing repairordermaterial docs for this order and populate materialLines
+    // Load existing repairordermaterial docs for this order and populate savedMaterialLines
     useEffect(() => {
         const loadExistingMaterials = async () => {
             if (!orderData?.id) return;
@@ -109,7 +118,7 @@ const ProposalInspector: React.FC = () => {
                     const lines = snap.docs.map(d => {
                         const data = d.data() as any;
                         const mid = data.Material_ID || data.materialId || null;
-                        const qty = Number(data.QuantityUsed || data.quanityused || 0);
+                        const qty = Math.max(1, Number(data.QuantityUsed || data.quanityused || 0) || 1);
                         const mCatalog = materialsCatalog.find(m => m.id === mid) || {};
                         const unitPrice = mCatalog.Price || mCatalog.price || 0;
                         return {
@@ -124,7 +133,7 @@ const ProposalInspector: React.FC = () => {
                             lineTotal: qty * unitPrice,
                         };
                     });
-                    setMaterialLines(lines);
+                    setSavedMaterialLines(lines);
                 }
             } catch (e) {
                 // ignore load errors but keep UI usable
@@ -134,6 +143,58 @@ const ProposalInspector: React.FC = () => {
         loadExistingMaterials();
         // run when orderData or materialsCatalog changes (so names/prices can be resolved)
     }, [orderData, materialsCatalog]);
+
+    // Load existing repairorderlabor docs for this order into savedLaborLines
+    useEffect(() => {
+        const loadExistingLabor = async () => {
+            if (!orderData?.id) return;
+            try {
+                const labQuery = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
+                const snap = await getDocs(labQuery);
+                if (!snap.empty) {
+                    const lines = snap.docs.map(d => {
+                        const data = d.data() as any;
+                        const days = Math.max(1, Number(data.Days ?? data.Quantity ?? data.qty ?? 0) || 1);
+                        const description = data.Description || data.description || '';
+                        const employeeId = data.Employee_ID || data.employeeId || '';
+                        const employeeName = data.EmployeeName || data.employeeName || '';
+                        return {
+                            docId: d.id,
+                            id: Date.now() + Math.floor(Math.random() * 1000),
+                            employeeId,
+                            employeeName,
+                            description,
+                            days,
+                        };
+                    });
+                    setSavedLaborLines(lines);
+                }
+            } catch (e) {
+                console.error('Failed to load existing repairorderlabor', e);
+            }
+        };
+        loadExistingLabor();
+    }, [orderData]);
+
+    // Load workshop employees with Role_ID = 5 for selection
+    useEffect(() => {
+        const loadEmployees = async () => {
+            if (!orderData?.workshopId) { setWorkshopEmployees([]); return; }
+            try {
+                setLoadingEmployees(true);
+                const employeesRef = collection(db, 'employees');
+                const q = query(employeesRef, where('workShopID', '==', orderData.workshopId), where('Role_ID', '==', 5));
+                const snap = await getDocs(q);
+                const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                setWorkshopEmployees(list);
+            } catch (e) {
+                setWorkshopEmployees([]);
+            } finally {
+                setLoadingEmployees(false);
+            }
+        };
+        loadEmployees();
+    }, [orderData?.workshopId]);
 
     useEffect(() => {
         const fetchNames = async () => {
@@ -164,20 +225,14 @@ const ProposalInspector: React.FC = () => {
 
     const handleSubmitProposal = async (values: any) => {
         if (!orderData) return;
+        // Validate: all labor lines must have 'description' filled if the line exists
+        const hasEmptyJob = laborLines.some(l => (l && (String(l.description || '').trim().length === 0)));
+        if (hasEmptyJob) {
+            message.error('Vui lòng nhập công việc cho tất cả dòng nhân công.');
+            return;
+        }
         setProposalLoading(true);
         try {
-            // If this is a re-proposal request or currently in 'đang giám định', ensure content changed
-            const statusNorm = normalize(orderData.Status);
-            const requireChange = new Set([normalize('yêu cầu đề xuất lại'), normalize('đang giám định')]);
-            if (requireChange.has(statusNorm)) {
-                const prev = (existingProposal || '').toString().trim();
-                const cur = (proposal || '').toString().trim();
-                if (!cur || cur === prev) {
-                    message.error('Vui lòng chỉnh sửa/nhập phương án mới trước khi gửi.');
-                    setProposalLoading(false);
-                    return;
-                }
-            }
             await updateDoc(doc(db, 'repairOrder', orderData.id), {
                 repairplan: proposal,
                 Status: 'Đã đề xuất phương án',
@@ -211,15 +266,48 @@ const ProposalInspector: React.FC = () => {
                 message.warning('Đề xuất văn bản thành công nhưng lưu vật liệu gặp lỗi (xem console).');
             }
 
-            // update total cost on the repairOrder so workshop can see computed total
+            // Replace existing labor docs with the current laborLines
+            try {
+                const existingLabQuery = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
+                const existingLabSnap = await getDocs(existingLabQuery);
+                for (const ed of existingLabSnap.docs) {
+                    try { await deleteDoc(doc(db, 'repairorderlabor', ed.id)); } catch (innerE) { console.error('Failed to delete repairorderlabor doc', innerE); }
+                }
+                for (const l of laborLines) {
+                    if (!l) continue;
+                    await addDoc(collection(db, 'repairorderlabor'), {
+                        RepairOrder_ID: orderData.id,
+                        Employee_ID: l.employeeId || null,
+                        EmployeeName: l.employeeName || '',
+                        Description: l.description || '',
+                        Days: Number(l.days) || 0,
+                        Quantity: Number(l.days) || 0, // giữ tương thích dữ liệu cũ
+                        UnitPrice: LABOR_DAY_RATE,
+                        createdAt: serverTimestamp(),
+                    });
+                }
+            } catch (e) {
+                console.error('Failed to save repairorderlabor', e);
+                message.warning('Lưu nhân công gặp lỗi (xem console).');
+            }
+
+            // update total/labor/material cost on the repairOrder so workshop can see computed values
             try {
                 await updateDoc(doc(db, 'repairOrder', orderData.id), {
-                    totalCost: Number(materialsCost) || 0,
+                    totalCost: Number(materialsCost + laborCost) || 0,
+                    laborCost: Number(laborCost) || 0,
+                    materialsCost: Number(materialsCost) || 0,
                 });
             } catch (e) {
                 console.error('Failed to update repairOrder.totalCost', e);
             }
 
+            // close modal and inform user
+            setModalVisible(false);
+            setExistingProposal(proposal);
+            // Sau khi lưu thành công, cập nhật bản đã lưu = bản nháp
+            setSavedMaterialLines(materialLines.map(l => ({ ...l })));
+            setSavedLaborLines(laborLines.map(l => ({ ...l })));
             message.success('Đã gửi đề xuất phương án thành công!');
             // Navigate to inspector home and open the 'proposal' tab
             navigate('/inspector?tab=proposal', { replace: true });
@@ -240,7 +328,21 @@ const ProposalInspector: React.FC = () => {
     });
     const removeMaterialLine = (idx: number) => setMaterialLines(prev => prev.filter((_, i) => i !== idx));
 
+    // Labor helpers
+    const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', description: '', days: 1 }]);
+    const updateLaborLine = (idx: number, patch: any) => setLaborLines(prev => {
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...patch };
+        return next;
+    });
+    const removeLaborLine = (idx: number) => setLaborLines(prev => prev.filter((_, i) => i !== idx));
+
+    // Costs for draft (modal)
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
+    // Costs for saved (read-only)
+    const savedMaterialsCost = savedMaterialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    const savedLaborCost = savedLaborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
 
     // handle saving materials will be part of handleSubmitProposal to combine actions
 
@@ -345,7 +447,7 @@ const ProposalInspector: React.FC = () => {
                                     <Col span={2} />
                                 </Row>
 
-                                {materialLines.map((line, idx) => (
+                                {savedMaterialLines.map((line, idx) => (
                                     <Row key={line.id || idx} gutter={8} className="mb-2">
                                         <Col span={12}>
                                             <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
@@ -360,8 +462,26 @@ const ProposalInspector: React.FC = () => {
                                     </Row>
                                 ))}
 
-                                <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                                <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
+                            <Card size="small" title="Nhân công đề xuất" className="mt-4">
+                                <Row gutter={8} className="mb-2 font-medium">
+                                    <Col span={8}><div>Nhân viên</div></Col>
+                                    <Col span={8}><div>Công việc</div></Col>
+                                    <Col span={4}><div>Số ngày</div></Col>
+                                    <Col span={4}><div>Chi phí</div></Col>
+                                </Row>
+                                {savedLaborLines.map((line, idx) => (
+                                    <Row key={line.id || idx} gutter={8} className="mb-2">
+                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
+                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
+                                        <Col span={4}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                        <Col span={4}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                    </Row>
+                                ))}
+                                <div className="text-right font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
+                            </Card>
+                            <div className="text-right font-semibold mt-2">Tổng chi phí: {(savedMaterialsCost + savedLaborCost).toLocaleString('vi-VN')} đ</div>
                         </div>
                     )}
                     
@@ -384,6 +504,12 @@ const ProposalInspector: React.FC = () => {
                                             setCustomerRequest('');
                                             try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
                                         }
+                                    // Khởi tạo bản nháp từ dữ liệu đã lưu để đảm bảo đóng modal không làm thay đổi bản lưu
+                                    try {
+                                        setMaterialLines(savedMaterialLines.map(l => ({ ...l })));
+                                        setLaborLines(savedLaborLines.map(l => ({ ...l })));
+                                    } catch {}
+                                    setSubmitAttempted(false);
                                     setModalVisible(true);
                                 }}
                             >
@@ -403,8 +529,9 @@ const ProposalInspector: React.FC = () => {
                             form={form}
                             layout="vertical"
                             onFinish={async (vals) => {
-                                // ensure local proposal state is up-to-date
-                                setProposal(vals.proposal);
+                                // đảm bảo state proposal đồng bộ với Form
+                                const text = (vals.proposal || '').toString();
+                                setProposal(text);
                                 await handleSubmitProposal(vals);
                             }}
                         >
@@ -423,14 +550,6 @@ const ProposalInspector: React.FC = () => {
                             >
                                 <Input.TextArea
                                     rows={6}
-                                    value={proposal}
-                                    onChange={(e) => {
-                                        const v = e.target.value;
-                                        setProposal(v);
-                                        const prev = (existingProposal || '').toString().trim();
-                                        const cur = (v || '').toString().trim();
-                                        setProposalChanged(cur !== prev && cur.length > 0);
-                                    }}
                                     placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..."
                                 />
                             </Form.Item>
@@ -455,7 +574,7 @@ const ProposalInspector: React.FC = () => {
                                                 />
                                             </Col>
                                             <Col span={6}>
-                                                <InputNumber min={0} style={{ width: '100%' }} value={line.qty} onChange={(v) => updateMaterialLine(idx, { qty: v || 0 })} />
+                                                <InputNumber min={1} style={{ width: '100%' }} value={line.qty} onChange={(v) => updateMaterialLine(idx, { qty: Math.max(1, Number(v) || 1) })} />
                                             </Col>
                                             <Col span={4}>
                                                 <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
@@ -465,12 +584,71 @@ const ProposalInspector: React.FC = () => {
                                             </Col>
                                         </Row>
                                     ))}
-                                    <div className="text-right font-medium">Tổng vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                                    <div className="text-right font-medium">Chi phí vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
                                 </Card>
-
-                                <div style={{ textAlign: 'right' }}>
-                                    <Button style={{ marginRight: 8 }} onClick={() => setModalVisible(false)}>Hủy</Button>
-                                    <Button type="primary" htmlType="submit" loading={proposalLoading}>Gửi đề xuất phương án</Button>
+                                
+                                <Card size="small" title="Nhân công đề xuất" className="mb-4">
+                                    <div className="mb-2">
+                                        <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
+                                    </div>
+                                    <Row gutter={8} className="mb-2 font-medium">
+                                        <Col span={8}><div>Nhân viên</div></Col>
+                                        <Col span={8}><div>Công việc</div></Col>
+                                        <Col span={4}><div>Số ngày</div></Col>
+                                        <Col span={2}><div>Chi phí</div></Col>
+                                        <Col span={2}></Col>
+                                    </Row>
+                                    {laborLines.map((line, idx) => (
+                                        <Row key={line.id} gutter={8} className="mb-2">
+                                            <Col span={8}>
+                                                <Select
+                                                    showSearch
+                                                    placeholder={loadingEmployees ? 'Đang tải...' : 'Chọn nhân viên'}
+                                                    value={line.employeeId || undefined}
+                                                    onChange={(val, opt: any) => updateLaborLine(idx, { employeeId: val, employeeName: (opt?.label as string) || '' })}
+                                                    options={(function(){
+                                                        const selected = new Set(laborLines.map(l => l.employeeId).filter(Boolean));
+                                                        return workshopEmployees.map(e => ({
+                                                            label: e.UserName || e.id,
+                                                            value: e.id,
+                                                            disabled: selected.has(e.id) && e.id !== line.employeeId,
+                                                        }));
+                                                    })()}
+                                                    filterOption={(input, option) => (option?.label as string).toLowerCase().includes(input.toLowerCase())}
+                                                    loading={loadingEmployees}
+                                                />
+                                            </Col>
+                                            <Col span={8}>
+                                                <Form.Item
+                                                    style={{ marginBottom: 0 }}
+                                                    validateStatus={submitAttempted && !String(line.description || '').trim() ? 'error' : ''}
+                                                    help={submitAttempted && !String(line.description || '').trim() ? 'Bắt buộc nhập công việc' : undefined}
+                                                >
+                                                    <Input
+                                                        placeholder="Công việc (VD: sơn, hàn...)"
+                                                        value={line.description}
+                                                        onChange={(e) => updateLaborLine(idx, { description: e.target.value })}
+                                                    />
+                                                </Form.Item>
+                                            </Col>
+                                            <Col span={4}>
+                                                <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
+                                            </Col>
+                                            <Col span={2}>
+                                                <div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div>
+                                            </Col>
+                                            <Col span={2}>
+                                                <Button danger size="small" onClick={() => removeLaborLine(idx)}>Xóa</Button>
+                                            </Col>
+                                        </Row>
+                                    ))}
+                                    <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
+                                </Card>
+                                <div className="text-right font-semibold mt-3">Tổng chi phí: {(materialsCost + laborCost).toLocaleString('vi-VN')} đ</div>
+                                
+                                <div style={{ textAlign: 'right', marginTop: 20 }}>
+                                    <Button style={{ marginRight: 8 }} onClick={() => { setSubmitAttempted(false); setModalVisible(false); }}>Hủy</Button>
+                                    <Button type="primary" onClick={() => { setSubmitAttempted(true); form.submit(); }} loading={proposalLoading}>Gửi đề xuất phương án</Button>
                                 </div>
                             </Form.Item>
                         </Form>

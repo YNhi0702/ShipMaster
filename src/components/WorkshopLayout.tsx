@@ -7,7 +7,7 @@ import WorkshopSidebar from './WorkshopSidebar';
 const { Header, Content } = Layout;
 
 interface WorkshopLayoutProps {
-    selectedKey?: 'orders' | 'proposal' | 'schedule' | 'inspected';
+    selectedKey?: 'orders' | 'proposal' | 'schedule' | 'inspected' | 'employees';
     onSelect?: (k: string) => void;
     userName: string;
     loadingUser: boolean;
@@ -21,6 +21,7 @@ const WorkshopLayout: React.FC<WorkshopLayoutProps> = ({ selectedKey = 'orders',
     const defaultOnSelect = (k: string) => {
         if (k === 'orders') navigate('/workshop');
         else if (k === 'schedule') navigate('/workshop?tab=schedule');
+        else if (k === 'employees') navigate('/workshop?tab=employees');
         else if (k === 'inspected') navigate('/workshop?tab=inspected');
         else navigate('/workshop');
     };

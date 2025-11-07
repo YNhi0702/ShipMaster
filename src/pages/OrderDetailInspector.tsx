@@ -17,6 +17,8 @@ const OrderDetailInspector: React.FC = () => {
     const [shipInfo, setShipInfo] = useState<any | null>(null);
     const [workshopName, setWorkshopName] = useState('');
     const [employeeName, setEmployeeName] = useState('');
+    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string; Email?: string; Phone?: string }>>([]);
+    const [loadingEmployees, setLoadingEmployees] = useState(false);
     const [accepting, setAccepting] = useState(false);
     const [accepted, setAccepted] = useState(false);
     const [showProposal, setShowProposal] = useState(false);
@@ -130,6 +132,33 @@ const OrderDetailInspector: React.FC = () => {
         };
         fetchNames();
     }, [orderData]);
+
+    // Load employees (role 5) of the selected workshop
+    useEffect(() => {
+        const loadWorkshopEmployees = async () => {
+            if (!orderData?.workshopId) {
+                setWorkshopEmployees([]);
+                return;
+            }
+            try {
+                setLoadingEmployees(true);
+                const employeesRef = collection(db, 'employees');
+                const q = query(
+                    employeesRef,
+                    where('workShopID', '==', orderData.workshopId),
+                    where('Role_ID', '==', 5)
+                );
+                const snap = await getDocs(q);
+                const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                setWorkshopEmployees(list);
+            } catch (e) {
+                setWorkshopEmployees([]);
+            } finally {
+                setLoadingEmployees(false);
+            }
+        };
+        loadWorkshopEmployees();
+    }, [orderData?.workshopId]);
 
     const handleAccept = async () => {
         if (!orderData) return;
@@ -269,6 +298,28 @@ const OrderDetailInspector: React.FC = () => {
                         <Descriptions.Item label="Số động cơ phụ">{shipInfo.auxiliary_engines_count}</Descriptions.Item>
                     )}
                 </Descriptions>
+
+                    {/* Employees of selected workshop with Role_ID = 5 */}
+                    <div className="mt-6 max-w-2xl">
+                        <Title level={4} className="mb-3">Nhân viên của xưởng (Role 5)</Title>
+                        {loadingEmployees ? (
+                            <div className="text-gray-500">Đang tải danh sách nhân viên...</div>
+                        ) : workshopEmployees.length === 0 ? (
+                            <div className="text-gray-500">Không có nhân viên phù hợp.</div>
+                        ) : (
+                            <div className="flex flex-col gap-3">
+                                {workshopEmployees.map(emp => (
+                                    <div key={emp.id} className="flex items-center gap-3 p-3 border rounded">
+                                        <Avatar icon={<UserOutlined />} />
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">{emp.UserName || 'Nhân viên'}</span>
+                                            <span className="text-sm text-gray-600">{emp.Phone || ''}{emp.Phone && emp.Email ? ' · ' : ''}{emp.Email || ''}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
 
                 {(customerName || customerPhone || customerEmail) && (

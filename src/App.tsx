@@ -12,6 +12,7 @@ import ProposalInspector from "./pages/ProposalInspector";
 import OrderDetailDone from "./pages/OrderDetailDone";
 import WorkshopHome from "./pages/WorkshopHome";
 import OrderInfo from "./pages/OrderInfo";
+// import WorkshopEmployees from "./pages/WorkshopEmployees";
 
 const App: React.FC = () => {
   return (
@@ -82,6 +83,7 @@ const App: React.FC = () => {
                     <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
                       <OrderInfo />
                     </PrivateRoute>} />
+              {/** HR management is now integrated inside WorkshopHome (?tab=employees). Standalone route removed. **/}
         </Routes>
       </Router>
   );

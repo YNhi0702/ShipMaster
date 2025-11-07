@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
-import { SolutionOutlined, FileDoneOutlined, CalendarOutlined, CheckCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { SolutionOutlined, CalendarOutlined, TeamOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Sider } = Layout;
@@ -51,6 +51,7 @@ const WorkshopSidebar: React.FC<WorkshopSidebarProps> = ({ selectedKey = 'orders
 				items={[
 					{ key: 'orders', icon: <SolutionOutlined />, label: 'Đơn sửa chữa' },
 					{ key: 'schedule', icon: <CalendarOutlined />, label: 'Lịch sửa chữa' },
+					{ key: 'employees', icon: <TeamOutlined />, label: 'Quản lý nhân sự' },
 				]}
 			/>
 		</Sider>

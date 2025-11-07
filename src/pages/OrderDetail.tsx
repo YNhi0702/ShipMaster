@@ -178,6 +178,10 @@ const OrderDetail: React.FC = () => {
     }, [orderData]);
 
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    // Use persisted costs if available on the order, otherwise fall back to computed values
+    const savedMaterialsCost = Number(orderData?.materialsCost) || materialsCost;
+    const savedLaborCost = Number(orderData?.laborCost) || 0;
+    const savedTotalCost = Number(orderData?.totalCost) || (savedMaterialsCost + savedLaborCost);
 
     const handleSubmitProposalFromModal = async () => {
         if (!orderData?.id) return;
@@ -381,8 +385,14 @@ const OrderDetail: React.FC = () => {
                                 </Row>
                             ))}
 
-                            <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                            <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
                         </Card>
+
+                        {/* Chi phí tổng hợp */}
+                        <div className="mt-2 text-right">
+                            <div className="font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
+                            <div className="font-semibold mt-1">Tổng chi phí: {savedTotalCost.toLocaleString('vi-VN')} đ</div>
+                        </div>
 
                         {/* Cancel button moved to page bottom so it's visible regardless of repairplan */}
                     </div>
@@ -410,7 +420,7 @@ const OrderDetail: React.FC = () => {
                 >
                     <Form layout="vertical">
                         <Form.Item>
-                            {/* Read-only view for customers: show the proposal text but do not allow editing here */}
+                            {}
                             <Input.TextArea rows={6} value={proposalText} readOnly />
                         </Form.Item>
 
@@ -439,8 +449,14 @@ const OrderDetail: React.FC = () => {
                                     </Row>
                                 ))}
 
-                                <div className="text-right font-medium">Tổng chi phí: {materialsCost.toLocaleString('vi-VN')} đ</div>
+                                <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
+
+                            {/* Tổng hợp chi phí trong modal */}
+                            <div className="mt-2 text-right">
+                                <div className="font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
+                                <div className="font-semibold mt-1">Tổng chi phí: {savedTotalCost.toLocaleString('vi-VN')} đ</div>
+                            </div>
 
                             <div style={{ textAlign: 'right' }}>
                                 <Button onClick={() => setProposalModalVisible(false)}>Đóng</Button>

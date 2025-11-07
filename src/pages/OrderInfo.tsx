@@ -3,10 +3,11 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Descriptions, Spin, Button, Typography, message, Row, Col, Card, Input } from 'antd';
 import moment from 'moment';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import WorkshopLayout from '../components/WorkshopLayout';
 
 const { Title } = Typography;
+const LABOR_DAY_RATE = 350000; // đơn giá ngày công cố định
 
 const OrderInfo: React.FC = () => {
     const { id } = useParams();
@@ -20,6 +21,7 @@ const OrderInfo: React.FC = () => {
     const [headerName, setHeaderName] = useState<string>('');
     const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
     const [materialLines, setMaterialLines] = useState<any[]>([]);
+    const [laborLines, setLaborLines] = useState<any[]>([]);
 
     useEffect(() => {
         const load = async () => {
@@ -110,7 +112,53 @@ const OrderInfo: React.FC = () => {
 
                     setCustomer(cust);
                     // set headerName from the order's creator (customer) if available
-                    const creatorName = cust?.fullName || cust?.UserName || cust?.name || orderData?.createdByName || orderData?.createdBy || '';
+                    let creatorName = cust?.fullName || cust?.UserName || cust?.name || orderData?.createdByName || orderData?.createdBy || '';
+
+                    // If header is still empty, resolve current signed-in workshop user's name (like WorkshopHome)
+                    if (!creatorName) {
+                        try {
+                            const uid = auth?.currentUser?.uid;
+                            let resolvedName: string | null = null;
+
+                            if (uid) {
+                                // users collection
+                                try {
+                                    const userSnap = await getDoc(doc(db, 'users', uid));
+                                    if (userSnap.exists()) {
+                                        const u = userSnap.data();
+                                        resolvedName = (u as any)?.UserName || (u as any)?.fullName || (u as any)?.name || (u as any)?.displayName || null;
+                                    }
+                                } catch {}
+                            }
+
+                            // fallback by email from employees
+                            if (!resolvedName) {
+                                const email = auth?.currentUser?.email;
+                                if (email) {
+                                    try {
+                                        const empQ = query(collection(db, 'employees'), where('Email', '==', email));
+                                        const empSnap = await getDocs(empQ);
+                                        if (!empSnap.empty) {
+                                            const emp = empSnap.docs[0].data() as any;
+                                            resolvedName = emp?.UserName || emp?.fullName || emp?.name || null;
+                                        }
+                                    } catch {}
+                                }
+                            }
+
+                            // try workShop doc id == uid
+                            if (!resolvedName && auth?.currentUser?.uid) {
+                                try {
+                                    const wsDoc = await getDoc(doc(db, 'workShop', auth.currentUser.uid));
+                                    if (wsDoc.exists()) resolvedName = (wsDoc.data() as any).name || null;
+                                } catch {}
+                            }
+
+                            if (!resolvedName) resolvedName = auth?.currentUser?.displayName || 'Chủ xưởng';
+                            creatorName = resolvedName || '';
+                        } catch {}
+                    }
+
                     setHeaderName(creatorName || '');
                 } catch (e) {
                     // ignore
@@ -164,6 +212,28 @@ const OrderInfo: React.FC = () => {
                             });
                             setMaterialLines(lines);
                         }
+                        // load labor lines as well
+                        try {
+                            const lq = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
+                            const lsnap = await getDocs(lq);
+                            if (!lsnap.empty) {
+                                const ll = lsnap.docs.map(d => {
+                                    const data = d.data() as any;
+                                    const days = Math.max(1, Number(data.Days ?? data.Quantity ?? data.qty ?? 0) || 1);
+                                    const unitPrice = Number(data.UnitPrice || LABOR_DAY_RATE);
+                                    return {
+                                        id: d.id,
+                                        employeeId: data.Employee_ID || data.employeeId || '',
+                                        employeeName: data.EmployeeName || data.employeeName || '',
+                                        description: data.Description || data.description || '',
+                                        days,
+                                        unitPrice,
+                                        lineTotal: days * unitPrice,
+                                    };
+                                });
+                                setLaborLines(ll);
+                            }
+                        } catch (e2) { /* ignore */ }
                     }
                 } catch (e) {
                     // ignore
@@ -180,21 +250,74 @@ const OrderInfo: React.FC = () => {
 
     if (loading) return <Spin />;
 
+    // Costs: prefer saved on repairOrder, else compute from lines
+    const computedMaterials = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    const computedLabor = laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
+    const materialsCost = (order?.materialsCost !== undefined && order?.materialsCost !== null) ? Number(order.materialsCost) : computedMaterials;
+    const laborCost = (order?.laborCost !== undefined && order?.laborCost !== null) ? Number(order.laborCost) : computedLabor;
+    const totalCost = (order?.totalCost !== undefined && order?.totalCost !== null) ? Number(order.totalCost) : (materialsCost + laborCost);
+
     return (
         <WorkshopLayout selectedKey="orders" onSelect={(k) => { if (k === 'schedule') navigate('/workshop?tab=schedule'); else navigate('/workshop'); }} userName={headerName} loadingUser={false}>
-            {/* make content full-bleed within the WorkshopLayout by canceling the outer margins (m-6 -> 24px) */}
-            <div style={{ marginLeft: '-24px', marginRight: '-24px', width: 'calc(100% + 48px)' }}>
+            {/* keep default margins so content has comfortable left/right spacing */}
+            <div>
                 <div className="flex items-center justify-between mb-4">
                     <Title level={4} className="m-0">Thông tin chi tiết đơn sửa chữa</Title>
                     <Button onClick={() => navigate(-1)}>Quay lại</Button>
                 </div>
 
                 <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Mã đơn">{order?.id || '—'}</Descriptions.Item>
                     <Descriptions.Item label="Trạng thái">{order?.Status || order?.status || '—'}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày tạo">{order?.StartDate ? (order.StartDate.toDate ? moment(order.StartDate.toDate()).format('DD/MM/YYYY HH:mm') : moment(order.StartDate).format('DD/MM/YYYY HH:mm')) : (order?.createdAt || '—')}</Descriptions.Item>
-                    <Descriptions.Item label="Tóm tắt hỏng hóc">{order?.Description || order?.description || order?.RepairContent || '—'}</Descriptions.Item>
-                    <Descriptions.Item label="Tổng chi phí">{(order?.totalCost !== undefined && order?.totalCost !== null) ? Number(order.totalCost).toLocaleString('vi-VN') + ' đ' : (materialLines.length > 0 ? materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN') + ' đ' : '—')}</Descriptions.Item>
+                    <Descriptions.Item label="Ngày tạo">
+                        {(() => {
+                            const fmt = (v: any) => {
+                                if (!v) return undefined;
+                                try {
+                                    if (typeof v === 'string') {
+                                        const m = moment(v);
+                                        return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
+                                    }
+                                    if (typeof v === 'number') {
+                                        const m = moment(v);
+                                        return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
+                                    }
+                                    if (v?.toDate) {
+                                        const m = moment(v.toDate());
+                                        return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
+                                    }
+                                    if (typeof v === 'object' && v?.seconds) {
+                                        const m = moment(v.seconds * 1000);
+                                        return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
+                                    }
+                                    const m = moment(v);
+                                    return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
+                                } catch {
+                                    return undefined;
+                                }
+                            };
+
+                            const candidates = [
+                                order?.StartDate,
+                                order?.startDate,
+                                order?.CreatedAt,
+                                order?.createdAt,
+                                order?.CreateDate,
+                                order?.createDate,
+                                order?.DateCreated,
+                                order?.dateCreated,
+                                order?.created_on,
+                                order?.createdOn,
+                            ];
+                            for (const c of candidates) {
+                                const out = fmt(c);
+                                if (out) return out;
+                            }
+                            return '—';
+                        })()}
+                    </Descriptions.Item>
+                    <Descriptions.Item label="Tóm tắt hỏng hóc">
+                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{order?.Description || order?.description || order?.RepairContent || '—'}</div>
+                    </Descriptions.Item>
                 </Descriptions>
 
                 <div style={{ height: 16 }} />
@@ -250,7 +373,9 @@ const OrderInfo: React.FC = () => {
                                 </div>
 
                                 <div className="mt-3 w-full">
-                                    <Input.TextArea rows={6} value={(order as any).repairplan || ''} readOnly style={{ width: '100%' }} />
+                                    <Card size="small" bodyStyle={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                        {(order as any).repairplan || ''}
+                                    </Card>
                                 </div>
                             </div>
                         )}
@@ -268,7 +393,7 @@ const OrderInfo: React.FC = () => {
                                 {materialLines.map((line, idx) => (
                                     <Row key={line.id || idx} gutter={8} className="mb-2">
                                         <Col span={10}>
-                                            <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                            <div style={{ paddingTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line.name || line.materialId || 'Vật liệu'}</div>
                                         </Col>
                                         <Col span={4}>
                                             <div style={{ paddingTop: 6 }}>{line.unit || '-'}</div>
@@ -285,8 +410,37 @@ const OrderInfo: React.FC = () => {
                                     </Row>
                                 ))}
 
-                                <div className="text-right font-medium">Tổng chi phí: {materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN')} đ</div>
+                                <div className="text-right font-medium">Chi phí vật liệu: {materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN')} đ</div>
                             </Card>
+                        )}
+
+                        {laborLines.length > 0 && (
+                            <Card size="small" title="Nhân công đề xuất" className="mt-4" style={{ width: '100%' }}>
+                                <Row gutter={8} className="mb-2 font-medium">
+                                    <Col span={12}><div>Nhân viên</div></Col>
+                                    <Col span={8}><div>Công việc</div></Col>
+                                    <Col span={4}><div>Số ngày</div></Col>
+                                </Row>
+
+                                {laborLines.map((line, idx) => (
+                                    <Row key={line.id || idx} gutter={8} className="mb-2">
+                                        <Col span={12}>
+                                            <div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div>
+                                        </Col>
+                                        <Col span={8}>
+                                            <div style={{ paddingTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line.description || '-'}</div>
+                                        </Col>
+                                        <Col span={4}>
+                                            <div style={{ paddingTop: 6 }}>{line.days}</div>
+                                        </Col>
+                                    </Row>
+                                ))}
+
+                                <div className="text-right font-medium">Chi phí nhân công: {laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN')} đ</div>
+                            </Card>
+                        )}
+                        {(materialLines.length > 0 || laborLines.length > 0) && (
+                            <div className="text-right font-semibold mt-2">Tổng chi phí: {(materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0) + laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0)).toLocaleString('vi-VN')} đ</div>
                         )}
                     </div>
                 )}

@@ -72,7 +72,6 @@ const Login: React.FC = () => {
                     onFinish={onFinish}
                     style={{ maxWidth: 400, margin: 'auto', marginTop: '10%' }}
                 >
-                    <h2>Đăng nhập</h2>
                     <Form.Item
                         label="Email"
                         name="email"
