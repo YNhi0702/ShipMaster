@@ -5,8 +5,8 @@ import {
 } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { db, storage } from '../firebase';
-import CustomerLayout from '../components/CustomerLayout';
+import { db, storage } from '../../firebase';
+import CustomerLayout from '../../components/Customer/CustomerLayout';
 import {
     collection, query, where, getDocs,
     addDoc, Timestamp

@@ -1,10 +1,7 @@
-// src/routes/PrivateRoute.tsx
 import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase';
 
 interface PrivateRouteProps {
     children: ReactNode;
@@ -12,55 +9,67 @@ interface PrivateRouteProps {
 }
 
 const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) => {
-    const [user, setUser] = useState<User | null>(null);
-    const [role, setRole] = useState<string | null>(null);
+    const [userRole, setUserRole] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (currentUser) {
-                // Ưu tiên kiểm tra collection users
-                const docRef = doc(db, 'users', currentUser.uid);
-                const docSnap = await getDoc(docRef);
-                let userData = docSnap.data();
-                let foundRole = userData?.role || userData?.Role_ID || null;
-                // Nếu không có role ở users, kiểm tra employees
-                if (!foundRole) {
-                    const empRef = doc(db, 'employees', currentUser.uid);
-                    const empSnap = await getDoc(empRef);
-                    const empData = empSnap.data();
-                    foundRole = empData?.role || empData?.Role_ID || null;
+        let isActive = true;
+
+        const fetchUserRole = async () => {
+            setLoading(true);
+
+            const cachedRole = sessionStorage.getItem('role') || localStorage.getItem('role');
+            if (cachedRole) {
+                if (isActive) {
+                    setUserRole(cachedRole);
+                    setLoading(false);
                 }
-                setRole(foundRole);
-                setUser(currentUser);
-            } else {
-                setUser(null);
-                setRole(null);
+                return;
             }
-            setLoading(false);
-        });
-        return () => unsubscribe();
+
+            const uid = sessionStorage.getItem('uid') || localStorage.getItem('uid');
+            if (!uid) {
+                if (isActive) {
+                    setUserRole(null);
+                    setLoading(false);
+                }
+                return;
+            }
+
+            try {
+                const userDoc = await getDoc(doc(db, 'users', uid));
+                const roleFromDb = userDoc.exists() ? userDoc.data().role : null;
+
+                if (roleFromDb) {
+                    sessionStorage.setItem('role', roleFromDb);
+                    localStorage.setItem('role', roleFromDb);
+                }
+
+                if (isActive) {
+                    setUserRole(roleFromDb);
+                }
+            } catch (error) {
+                console.error('Error fetching user role:', error);
+                if (isActive) {
+                    setUserRole(null);
+                }
+            } finally {
+                if (isActive) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchUserRole();
+
+        return () => {
+            isActive = false;
+        };
     }, []);
 
-    if (loading) return <p>Loading...</p>;
-
-    // Normalize role về string để so sánh
-    const roleStr = role ? String(role).toLowerCase() : '';
-    const allowedRolesStr = allowedRoles.map(r => String(r).toLowerCase());
-    // Cho phép inspector: 1, '1', 'inspector', 'officer'
-    const isInspector = ['1', 'inspector', 'officer'].includes(roleStr) && allowedRolesStr.some(r => ['1','inspector','officer'].includes(r));
-    // Cho phép customer: 0, '0', 'customer'
-    const isCustomer = ['0', 'customer'].includes(roleStr) && allowedRolesStr.some(r => ['0','customer'].includes(r));
-    // Cho phép workshop owner: 2, '2', 'workshop', 'workshop_owner', 'owner'
-    const isWorkshopOwner = ['2', 'workshop', 'workshop_owner', 'owner'].includes(roleStr) && allowedRolesStr.some(r => ['2', 'workshop', 'workshop_owner', 'owner'].includes(r));
-    // Cho phép accountant, workshop_owner, director nếu cần
-
-    // Debug log
-    console.log('PrivateRoute: user', user?.uid, 'role', roleStr, 'allowed', allowedRolesStr, 'isInspector', isInspector, 'isCustomer', isCustomer);
-
-    if (!user || (!isInspector && !isCustomer && !isWorkshopOwner)) {
-        return <Navigate to="/login" replace />;
-    }
+    if (loading) return <div>Loading...</div>;
+    if (!userRole) return <Navigate to="/login" replace />;
+    if (!allowedRoles.includes(userRole)) return <Navigate to="/login" replace />;
 
     return <>{children}</>;
 };

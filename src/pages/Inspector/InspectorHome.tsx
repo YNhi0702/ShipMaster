@@ -3,9 +3,9 @@ import { Layout, Button, Table, Typography, Avatar, Spin, message, Dropdown, Tag
 import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import InspectorSidebar from '../components/InspectorSidebar';
-import InspectorLayout from '../components/InspectorLayout';
+import { db } from '../../firebase';
+import InspectorSidebar from '../../components/Inspector/InspectorSidebar';
+import InspectorLayout from '../../components/Inspector/InspectorLayout';
 import { useLocation } from 'react-router-dom';
 
 const { Header, Content } = Layout;

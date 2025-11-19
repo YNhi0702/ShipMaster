@@ -4,8 +4,8 @@ import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar,
 import { UserOutlined } from '@ant-design/icons';
 import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Modal, Form, Input, Row, Col, Card } from 'antd';
-import { db } from '../firebase';
-import CustomerLayout from '../components/CustomerLayout';
+import { db } from '../../firebase';
+import CustomerLayout from '../../components/Customer/CustomerLayout';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;

@@ -3,8 +3,8 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { Descriptions, Spin, Button, Typography, message, Row, Col, Card, Input } from 'antd';
 import moment from 'moment';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import WorkshopLayout from '../components/WorkshopLayout';
+import { db, auth } from '../../firebase';
+import WorkshopLayout from '../../components/Workshop/WorkshopLayout';
 
 const { Title } = Typography;
 const LABOR_DAY_RATE = 350000; // đơn giá ngày công cố định

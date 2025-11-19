@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Table, Typography, message, Space, Form, DatePicker, Modal, Select, Input } from 'antd';
+import { Button, Table, Typography, message, Space, Form, DatePicker, Modal, Select, Input, Checkbox } from 'antd';
 import moment from 'moment';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, addDoc, deleteDoc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
-import WorkshopLayout from '../components/WorkshopLayout';
+import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { db, auth } from '../../firebase';
+import WorkshopLayout from '../../components/Workshop/WorkshopLayout';
 
 const { Title } = Typography;
 
 const WorkshopHome: React.FC = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<any[]>([]);
-    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule' | 'employees'>('orders');
+    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule'>('orders');
     const [workshops, setWorkshops] = useState<Array<{ id: string; name: string }>>([]);
     const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
     const [orderSearch, setOrderSearch] = useState<string>('');
@@ -28,17 +28,6 @@ const WorkshopHome: React.FC = () => {
     const [scheduling, setScheduling] = useState(false);
     const [form] = Form.useForm();
     const [isEditingSchedule, setIsEditingSchedule] = useState(false);
-    // Employees management state
-    const [empList, setEmpList] = useState<any[]>([]);
-    const [empSearch, setEmpSearch] = useState('');
-    const [empForm] = Form.useForm();
-    const [empModalVisible, setEmpModalVisible] = useState(false);
-    const [empEditing, setEmpEditing] = useState<any | null>(null);
-    const [empSaving, setEmpSaving] = useState(false);
-    const [empLoading, setEmpLoading] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
-    const [deleteConfirmVisible, setDeleteConfirmVisible] = useState(false);
-    const [deleting, setDeleting] = useState(false);
 
     // initialize selected tab from URL query param `tab`
     useEffect(() => {
@@ -46,7 +35,6 @@ const WorkshopHome: React.FC = () => {
             const params = new URLSearchParams(location.search || '');
             const tab = params.get('tab');
             if (tab === 'schedule') setSelectedKey('schedule');
-            else if (tab === 'employees') setSelectedKey('employees');
             else setSelectedKey('orders');
         } catch (e) {
             // ignore
@@ -122,10 +110,9 @@ const WorkshopHome: React.FC = () => {
                     } catch (e) {
                         // ignore
                     }
-                    // Put Firestore doc id last to guarantee row.id is the document id even if data has an 'id' field
                     return {
-                        ...o,
                         id: d.id,
+                        ...o,
                         createdAt,
                         shipName,
                     };
@@ -309,34 +296,6 @@ const WorkshopHome: React.FC = () => {
         }
     }, [selectedWorkshopId]);
 
-    // load employees when viewing employees tab or workshop changes
-    useEffect(() => {
-        const loadEmployees = async () => {
-            if (!selectedWorkshopId) { setEmpList([]); return; }
-            try {
-                setEmpLoading(true);
-                let rows: any[] = [];
-                if (selectedWorkshopId === 'ALL') {
-                    // fetch all employees then filter by owned workshop ids
-                    const snapAll = await getDocs(collection(db, 'employees'));
-                    const all = snapAll.docs.map(d => ({ ...(d.data() as any), id: d.id }));
-                    const ownedIds = workshops.map(w => w.id);
-                    rows = all.filter((e: any) => ownedIds.includes(e.workShopID));
-                } else {
-                    const qEmp = query(collection(db, 'employees'), where('workShopID', '==', selectedWorkshopId));
-                    const snap = await getDocs(qEmp);
-                    rows = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
-                }
-                setEmpList(rows);
-            } catch (e) {
-                setEmpList([]);
-            } finally {
-                setEmpLoading(false);
-            }
-        };
-        if (selectedKey === 'employees') loadEmployees();
-    }, [selectedKey, selectedWorkshopId, workshops]);
-
 
 
     const columns = [
@@ -383,24 +342,22 @@ const WorkshopHome: React.FC = () => {
 
     const openScheduleForRecord = (record: any) => {
         setSchedulingOrderId(record.id);
-        // determine if this is an edit (existing schedule present)
-        const hasSchedule = !!(record.ScheduleStartDate || record.ScheduleEndDate || record._startDate);
+        // Correct logic: Only consider as "editing schedule" if both ScheduleStartDate and ScheduleEndDate exist
+        const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
         setIsEditingSchedule(hasSchedule);
-        // prefill form if schedule exists
+
         try {
-            if (record.ScheduleStartDate && record.ScheduleEndDate) {
+            if (hasSchedule) {
                 const s = record.ScheduleStartDate?.toDate ? moment(record.ScheduleStartDate.toDate()) : moment(record.ScheduleStartDate);
                 const e = record.ScheduleEndDate?.toDate ? moment(record.ScheduleEndDate.toDate()) : moment(record.ScheduleEndDate);
                 form.setFieldsValue({ dateRange: [s, e] });
-            } else if (record._startDate) {
-                const s = moment(record._startDate);
-                form.setFieldsValue({ dateRange: [s, s] });
             } else {
                 form.resetFields();
             }
         } catch (e) {
             form.resetFields();
         }
+
         setScheduleModalVisible(true);
     };
 
@@ -446,35 +403,32 @@ const WorkshopHome: React.FC = () => {
         return targets.includes(norm);
     };
 
-    const filteredScheduleRows = scheduleRows.filter((r) => {
-        // include orders that either have a scheduled status OR already have both ScheduleStartDate & ScheduleEndDate
-        const scheduledByStatus = isScheduledStatus(r.Status) || isScheduledStatus(r.status) || isScheduledStatus(r.StatusText);
-        const scheduledByFields = !!(r.ScheduleStartDate && r.ScheduleEndDate);
-        return scheduledByStatus || scheduledByFields;
-    });
+    // Adding valid schedule states
+    const validScheduleStates = ['Đã lên lịch', 'Sắp xếp lịch sửa chữa'];
 
-    // apply schedule-specific text and date filters
-    const normalizedScheduleSearch = (scheduleSearch || '').toString().toLowerCase().trim();
+    // Replacing old filter logic with filtering by valid statuses
+    const filteredScheduleRows = scheduleRows.filter((r) =>
+        validScheduleStates.includes(r.Status)
+    );
+
+    // Updating search filter to use filteredScheduleRows
     const filteredScheduleRowsWithSearch = filteredScheduleRows.filter((r) => {
-        // text matching across shipName, Status, createdAt (exclude id)
+        const normalizedSearch = (scheduleSearch || '').toString().toLowerCase().trim();
         const hay = `${r.shipName || ''} ${r.Status || ''} ${r.createdAt || ''}`.toLowerCase();
-        const textMatch = !normalizedScheduleSearch || hay.includes(normalizedScheduleSearch);
+        const textMatch = !normalizedSearch || hay.includes(normalizedSearch);
 
-        // date range filter (if provided)
         let dateMatch = true;
         if (scheduleDateRange && scheduleDateRange.length === 2) {
             const [startM, endM] = scheduleDateRange;
             const rowDate = r._startDate ? new Date(r._startDate) : null;
             if (rowDate) {
-                // compare as timestamps
                 const t = rowDate.getTime();
-                const s = startM ? startM.startOf ? startM.startOf('day').valueOf() : startM.valueOf() : null;
-                const e = endM ? endM.endOf ? endM.endOf('day').valueOf() : endM.valueOf() : null;
+                const s = startM ? startM.startOf('day').valueOf() : null;
+                const e = endM ? endM.endOf('day').valueOf() : null;
                 if (s && e) {
                     dateMatch = t >= s && t <= e;
                 }
             } else {
-                // if no date for row, exclude when date range specified
                 dateMatch = false;
             }
         }
@@ -491,148 +445,12 @@ const WorkshopHome: React.FC = () => {
         return hay.includes(normalizedOrderSearch);
     });
 
-    // Employees table helpers
-    const normalizedEmpSearch = (empSearch || '').toString().toLowerCase();
-    const filteredEmployees = empList
-        .filter(e => Number(e.Role_ID) === 5)
-        .filter(e => {
-            const hay = `${e.UserName || ''} ${e.fullName || ''} ${e.Email || ''} ${e.Phone || ''}`.toLowerCase();
-            return !normalizedEmpSearch || hay.includes(normalizedEmpSearch);
-        });
-
-    const employeeColumns: any[] = [
-        { title: 'STT', key: 'stt', width: 60, render: (_: any, __: any, idx: number) => idx + 1 },
-        { title: 'Họ tên', dataIndex: 'UserName', key: 'UserName', render: (_: any, r: any) => r.UserName || r.fullName || r.name || '—' },
-        { title: 'Email', dataIndex: 'Email', key: 'Email', render: (v: any) => v || '—' },
-        { title: 'Số điện thoại', dataIndex: 'Phone', key: 'Phone', render: (v: any) => v || '—' },
-        { title: 'Hành động', key: 'action', width: 220, render: (_: any, record: any) => (
-            <div className="flex gap-2">
-                <Button size="small" onClick={() => openEmpEdit(record)}>Sửa</Button>
-                <Button size="small" danger onClick={() => { setDeleteTarget(record); setDeleteConfirmVisible(true); }}>Xoá</Button>
-            </div>
-        )},
-    ];
-
-    const openEmpCreate = () => {
-        setEmpEditing(null);
-        empForm.resetFields();
-        const defaultWs = selectedWorkshopId && selectedWorkshopId !== 'ALL' ? selectedWorkshopId : undefined;
-        empForm.setFieldsValue({ Role_ID: 5, workShopID: defaultWs });
-        setEmpModalVisible(true);
-    };
-    const openEmpEdit = (rec: any) => {
-        setEmpEditing(rec);
-        const defaultWs = rec.workShopID || (selectedWorkshopId && selectedWorkshopId !== 'ALL' ? selectedWorkshopId : undefined);
-        empForm.setFieldsValue({
-            UserName: rec.UserName || rec.fullName || rec.name || '',
-            Email: rec.Email || '',
-            Phone: rec.Phone || '',
-            workShopID: defaultWs,
-        });
-        setEmpModalVisible(true);
-    };
-
-    const refreshEmployees = async () => {
-        if (!selectedWorkshopId) { setEmpList([]); return; }
-        if (selectedWorkshopId === 'ALL') {
-            const snapAll = await getDocs(collection(db, 'employees'));
-            const all = snapAll.docs.map(d => ({ ...(d.data() as any), id: d.id }));
-            const ownedIds = workshops.map(w => w.id);
-            setEmpList(all.filter((e: any) => ownedIds.includes(e.workShopID)));
-        } else {
-            const qEmp = query(collection(db, 'employees'), where('workShopID', '==', selectedWorkshopId));
-            const snap = await getDocs(qEmp);
-            const rows = snap.docs.map(d => ({ ...(d.data() as any), id: d.id }));
-            setEmpList(rows);
-        }
-    };
-
-    const doDeleteEmp = async (rec: any) => {
-        try {
-            setEmpLoading(true);
-            let targetId: string | null = (rec && typeof rec.id === 'string' && rec.id.length > 0) ? rec.id : null;
-            if (!targetId) {
-                const wsid = rec?.workShopID || (selectedWorkshopId && selectedWorkshopId !== 'ALL' ? selectedWorkshopId : null);
-                if (rec?.Email && wsid) {
-                    const q1 = query(collection(db, 'employees'), where('Email', '==', rec.Email), where('workShopID', '==', wsid));
-                    const s1 = await getDocs(q1);
-                    if (!s1.empty) targetId = s1.docs[0].id;
-                }
-                if (!targetId && rec?.Phone && wsid) {
-                    const q2 = query(collection(db, 'employees'), where('Phone', '==', rec.Phone), where('workShopID', '==', wsid));
-                    const s2 = await getDocs(q2);
-                    if (!s2.empty) targetId = s2.docs[0].id;
-                }
-            }
-            if (!targetId) {
-                message.error('Không tìm thấy hồ sơ để xoá');
-                return;
-            }
-            // optimistic update
-            setEmpList(prev => prev.filter(e => e.id !== targetId));
-            await deleteDoc(doc(db, 'employees', targetId));
-            message.success('Đã xoá nhân viên');
-            await refreshEmployees();
-        } catch (e: any) {
-            if (e?.code === 'permission-denied') {
-                message.error('Không đủ quyền xoá nhân viên (Firestore Rules).');
-            } else {
-                message.error(`Lỗi khi xoá${e?.message ? `: ${e.message}` : ''}`);
-            }
-            await refreshEmployees();
-        } finally {
-            setEmpLoading(false);
-        }
-    };
-
-    const handleEmpSubmit = async () => {
-        try {
-            const vals = await empForm.validateFields();
-            setEmpSaving(true);
-            const payload: any = {
-                UserName: vals.UserName,
-                Email: vals.Email || '',
-                Phone: vals.Phone || '',
-                Role_ID: 5,
-                workShopID: vals.workShopID || selectedWorkshopId,
-            };
-            if (empEditing) {
-                await updateDoc(doc(db, 'employees', empEditing.id), payload);
-                message.success('Đã cập nhật nhân viên');
-            } else {
-                await addDoc(collection(db, 'employees'), payload);
-                message.success('Đã thêm nhân viên');
-            }
-            setEmpModalVisible(false);
-            setEmpEditing(null);
-            empForm.resetFields();
-            // reload list according to current filter
-            if (selectedWorkshopId === 'ALL') {
-                const snapAll = await getDocs(collection(db, 'employees'));
-                const all = snapAll.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-                const ownedIds = workshops.map(w => w.id);
-                setEmpList(all.filter((e: any) => ownedIds.includes(e.workShopID)));
-            } else if (selectedWorkshopId) {
-                const qEmp = query(collection(db, 'employees'), where('workShopID', '==', selectedWorkshopId));
-                const snap = await getDocs(qEmp);
-                const rows = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-                setEmpList(rows);
-            }
-        } catch (e: any) {
-            if (e?.errorFields) return;
-            message.error('Lỗi khi lưu');
-        } finally {
-            setEmpSaving(false);
-        }
-    };
-
     // (No inspected view here) Workshop only exposes Orders and Schedule via the sidebar.
 
     return (
-        <WorkshopLayout selectedKey={selectedKey} onSelect={(key) => {
+        <WorkshopLayout selectedKey={selectedKey} onSelect={(key: string) => {
             setSelectedKey(key as any);
             if (key === 'schedule') navigate('/workshop?tab=schedule', { replace: true });
-            else if (key === 'employees') navigate('/workshop?tab=employees', { replace: true });
             else navigate('/workshop', { replace: true });
         }} userName={userName} loadingUser={loadingUser}>
 
@@ -751,44 +569,63 @@ const WorkshopHome: React.FC = () => {
                     open={scheduleModalVisible}
                     okText="Lưu"
                     cancelText="Huỷ"
-                    onCancel={() => { setScheduleModalVisible(false); form.resetFields(); setSchedulingOrderId(null); setIsEditingSchedule(false); }}
+                    onCancel={() => {
+                        setScheduleModalVisible(false);
+                        form.resetFields();
+                        setSchedulingOrderId(null);
+                        setIsEditingSchedule(false);
+                    }}
                     onOk={async () => {
                         try {
                             const vals = await form.validateFields();
                             const range = vals.dateRange as any[];
+                            const isCompleted = vals.isCompleted || false; // lấy trạng thái checkbox
+
                             if (!schedulingOrderId) throw new Error('Order id missing');
+
                             setScheduling(true);
                             const payload: any = {};
-                            let hasBothScheduleFields = false;
+
+                            // Lưu lịch sửa chữa
                             if (range && range[0] && range[1]) {
-                                // store schedule-specific timestamps so we don't overwrite order-level StartDate/EndDate
-                                // normalize to whole-day boundaries (local time)
                                 const startMoment: any = range[0];
                                 const endMoment: any = range[1];
+
                                 const sDate = startMoment.toDate();
                                 sDate.setHours(0, 0, 0, 0);
+
                                 const eDate = endMoment.toDate();
                                 eDate.setHours(23, 59, 59, 999);
+
                                 payload.ScheduleStartDate = Timestamp.fromDate(sDate);
                                 payload.ScheduleEndDate = Timestamp.fromDate(eDate);
-                                hasBothScheduleFields = true;
                             }
-                            // only set status to 'Đã lên lịch' when both schedule fields exist
-                            if (hasBothScheduleFields) {
+
+                            // Nếu đang CHỈNH SỬA → cho phép đổi trạng thái
+                            if (isEditingSchedule) {
+                                payload.Status = isCompleted ? 'Hoàn thành sửa chữa' : 'Đã lên lịch';
+                            } else {
+                                // Nếu là TẠO LỊCH mới
                                 payload.Status = 'Đã lên lịch';
                             }
+
                             await updateDoc(doc(db, 'repairOrder', schedulingOrderId), payload);
-                            if (isEditingSchedule) message.success('Đã cập nhật lịch cho đơn');
-                            else message.success('Đã tạo lịch cho đơn');
+
+                            message.success(
+                                isCompleted ? 'Đã hoàn thành sửa chữa' :
+                                isEditingSchedule ? 'Đã cập nhật lịch' :
+                                'Đã tạo lịch cho đơn'
+                            );
+
+                            // reset modal
                             setScheduleModalVisible(false);
                             form.resetFields();
                             setSchedulingOrderId(null);
-                            // refresh only the orders for the currently selected workshop so we stay on that workshop's tab
                             await fetchOrdersForWorkshop(selectedWorkshopId);
-                            // ensure we remain on schedule view for that workshop
                             setSelectedKey('schedule');
+
                         } catch (e: any) {
-                            message.error((e && e.message) || 'Lỗi khi tạo lịch');
+                            message.error(e.message || 'Lỗi khi lưu lịch');
                         } finally {
                             setScheduling(false);
                             setIsEditingSchedule(false);
@@ -797,96 +634,20 @@ const WorkshopHome: React.FC = () => {
                     confirmLoading={scheduling}
                 >
                     <Form form={form} layout="vertical">
-                        <Form.Item name="dateRange" label="Chọn ngày bắt đầu - kết thúc" rules={[{ required: true }]}> 
+                        <Form.Item
+                            name="dateRange"
+                            label="Chọn ngày bắt đầu - kết thúc"
+                            rules={[{ required: true }]}
+                        >
                             <DatePicker.RangePicker />
                         </Form.Item>
-                    </Form>
-                </Modal>
-            </div>
-        )}
 
-        {selectedKey === 'employees' && (
-            <div className="w-full overflow-x-auto">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <Title level={5} className="m-0">Danh sách nhân viên</Title>
-                        <Select
-                            style={{ width: 320 }}
-                            placeholder="Chọn xưởng"
-                            value={selectedWorkshopId || undefined}
-                            onChange={(val) => setSelectedWorkshopId(val as string)}
-                            options={[{ label: 'Tất cả', value: 'ALL' }, ...workshops.map(w => ({ label: w.name, value: w.id }))]}
-                            notFoundContent={workshops.length === 0 ? 'Không có xưởng' : undefined}
-                        />
-                        <Input.Search
-                            placeholder="Tìm theo tên, email, SĐT"
-                            allowClear
-                            onSearch={(v) => setEmpSearch(v)}
-                            onChange={(e) => setEmpSearch(e.target.value)}
-                            style={{ width: 360 }}
-                            value={empSearch}
-                        />
-                    </div>
-                    <Button type="primary" onClick={openEmpCreate}>+ Thêm nhân viên</Button>
-                </div>
-
-                <Table
-                    columns={employeeColumns}
-                    dataSource={filteredEmployees}
-                    rowKey="id"
-                    loading={empLoading}
-                    bordered
-                    pagination={{ pageSize: 10 }}
-                    scroll={{ x: 'max-content' }}
-                />
-
-                <Modal
-                    title="Xoá nhân viên"
-                    open={deleteConfirmVisible}
-                    okText="Xoá"
-                    cancelText="Huỷ"
-                    okButtonProps={{ danger: true }}
-                    confirmLoading={deleting}
-                    onCancel={() => { setDeleteConfirmVisible(false); setDeleteTarget(null); }}
-                    onOk={async () => {
-                        try {
-                            setDeleting(true);
-                            if (deleteTarget) {
-                                await doDeleteEmp(deleteTarget);
-                            }
-                            setDeleteConfirmVisible(false);
-                            setDeleteTarget(null);
-                        } finally {
-                            setDeleting(false);
-                        }
-                    }}
-                >
-                    <div>
-                        {`Bạn có chắc chắn muốn xoá nhân viên "${(deleteTarget && (deleteTarget.UserName || deleteTarget.fullName || deleteTarget.Email || deleteTarget.Phone)) || ''}"?`}
-                    </div>
-                </Modal>
-                <Modal
-                    title={empEditing ? 'Cập nhật nhân viên' : 'Thêm nhân viên'}
-                    open={empModalVisible}
-                    onCancel={() => { setEmpModalVisible(false); setEmpEditing(null); empForm.resetFields(); }}
-                    onOk={handleEmpSubmit}
-                    okText={empEditing ? 'Lưu' : 'Thêm'}
-                    confirmLoading={empSaving}
-                >
-                    <Form form={empForm} layout="vertical">
-                        <Form.Item name="UserName" label="Họ tên" rules={[{ required: true, message: 'Vui lòng nhập họ tên' }]}>
-                            <Input placeholder="Nguyễn Văn A" />
-                        </Form.Item>
-                        <Form.Item name="Email" label="Email" rules={[{ required: true, message: 'Vui lòng nhập email' }, { type: 'email', message: 'Email không hợp lệ' }]}>
-                            <Input placeholder="employee@example.com" />
-                        </Form.Item>
-                        <Form.Item name="Phone" label="Số điện thoại" rules={[{ required: true, message: 'Vui lòng nhập số điện thoại' }]}>
-                            <Input placeholder="090..." />
-                        </Form.Item>
-                        <Form.Item name="workShopID" label="Xưởng" rules={[{ required: true, message: 'Chọn xưởng' }]}>
-                            <Select options={workshops.map(w => ({ label: w.name, value: w.id }))} />
-                        </Form.Item>
-                        {/* Role is fixed to 5 internally; no field shown */}
+                        {/* Checkbox chỉ hiện khi CHỈNH SỬA lịch */}
+                        {isEditingSchedule && (
+                            <Form.Item name="isCompleted" valuePropName="checked">
+                                <Checkbox>Hoàn thành sửa chữa</Checkbox>
+                            </Form.Item>
+                        )}
                     </Form>
                 </Modal>
             </div>

@@ -3,9 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Layout, Typography, Descriptions, Image, Button, Spin, message, Form, Input, Modal, Select, InputNumber, Row, Col, Divider, Card } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs, addDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import InspectorSidebar from '../components/InspectorSidebar';
-import InspectorLayout from '../components/InspectorLayout';
+import { db } from '../../firebase';
+import InspectorLayout from '../../components/Inspector/InspectorLayout';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;

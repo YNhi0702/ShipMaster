@@ -3,8 +3,8 @@ import { Layout, Button, Table, Typography, Avatar, Spin } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import CustomerLayout from '../components/CustomerLayout';
+import { db } from '../../firebase';
+import CustomerLayout from '../../components/Customer/CustomerLayout';
 
 const { Header, Content } = Layout;
 const { Title } = Typography;

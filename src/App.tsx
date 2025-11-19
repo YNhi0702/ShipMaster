@@ -1,91 +1,144 @@
 // src/App.tsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import PrivateRoute from './routes/PrivateRoute';
-import AuthenComponent from "./pages/AuthenComponent";
-import CustomerHome from "./pages/CustomerHome";
-import OrderDetail from "./pages/OrderDetail";
-import CreateOrder from "./pages/CreateOrder";
-import InspectorHome from "./pages/InspectorHome";
-import OrderDetailInspector from "./pages/OrderDetailInspector";
-import ProposalInspector from "./pages/ProposalInspector";
-import OrderDetailDone from "./pages/OrderDetailDone";
-import WorkshopHome from "./pages/WorkshopHome";
-import OrderInfo from "./pages/OrderInfo";
-// import WorkshopEmployees from "./pages/WorkshopEmployees";
+
+import AuthenComponent from "./pages/Auth/AuthenComponent";
+
+// CUSTOMER
+import CustomerHome from "./pages/Customer/CustomerHome";
+import OrderDetail from "./pages/Customer/OrderDetail";
+import CreateOrder from "./pages/Customer/CreateOrder";
+
+// INSPECTOR
+import InspectorHome from "./pages/Inspector/InspectorHome";
+import OrderDetailInspector from "./pages/Inspector/OrderDetailInspector";
+import ProposalInspector from "./pages/Inspector/ProposalInspector";
+import OrderDetailDone from "./pages/Inspector/OrderDetailDone";
+
+// WORKSHOP
+import WorkshopHome from "./pages/Workshop/WorkshopHome";
+import OrderInfo from "./pages/Workshop/OrderInfo";
+
+// ACCOUNTANT
+import AccountLayout from "./components/Account/AccountLayout";
+import AccountHome from "./pages/Account/AccountHome";
+import PaymentList from "./pages/Account/PaymentList";
 
 const App: React.FC = () => {
   return (
-      <Router>
-        <Routes>
-          <Route path="/login" element={<AuthenComponent />} />
+    <Router>
+      <Routes>
 
-          <Route
-              path="/"
-              element={
-                <PrivateRoute allowedRoles={['customer']}>
-                    <CustomerHome/>
-                </PrivateRoute>
-              }
-          />
-      <Route path="/orders/:id"
-           element={
-        <PrivateRoute allowedRoles={['customer']}>
-          <OrderDetail />
-        </PrivateRoute>} />
+        {/* LOGIN */}
+        <Route path="/login" element={<AuthenComponent />} />
 
-      {/* Route chi tiết đơn cho inspector */}
-      <Route path="/inspector/orders/:id"
-           element={
-        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-          <OrderDetailInspector />
-        </PrivateRoute>} />
+        {/* CUSTOMER HOME */}
+        <Route
+          path="/"
+          element={
+            <PrivateRoute allowedRoles={['customer']}>
+              <CustomerHome />
+            </PrivateRoute>
+          }
+        />
 
+        {/* CUSTOMER - ORDER DETAIL */}
+        <Route
+          path="/orders/:id"
+          element={
+            <PrivateRoute allowedRoles={['customer']}>
+              <OrderDetail />
+            </PrivateRoute>
+          }
+        />
 
+        {/* INSPECTOR - ORDER DETAIL */}
+        <Route
+          path="/inspector/orders/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <OrderDetailInspector />
+            </PrivateRoute>
+          }
+        />
 
-      {/* Route detail for done/inspected orders (shared read-only view) */}
-      <Route path="/inspector/done/:id"
-           element={
-        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-          <OrderDetailDone />
-        </PrivateRoute>} />
+        {/* INSPECTOR - DONE DETAIL */}
+        <Route
+          path="/inspector/done/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <OrderDetailDone />
+            </PrivateRoute>
+          }
+        />
 
-      {/* Route đề xuất phương án cho inspector */}
-      <Route path="/inspector/proposal/:id"
-           element={
-        <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-          <ProposalInspector />
-        </PrivateRoute>} />
-            <Route path="/createRepairOder"
-                   element={
-                       <PrivateRoute allowedRoles={['customer']}>
-                           <CreateOrder />
-                       </PrivateRoute>} />
+        {/* INSPECTOR - PROPOSAL */}
+        <Route
+          path="/inspector/proposal/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <ProposalInspector />
+            </PrivateRoute>
+          }
+        />
 
-          <Route
-            path="/inspector"
-            element={
-              <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-                <InspectorHome />
-              </PrivateRoute>
-            }
-          />
-              <Route
-                path="/workshop"
-                element={
-                  <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
-                    <WorkshopHome />
-                  </PrivateRoute>
-                }
-              />
-              <Route path="/workshop/orders/:id"
-                   element={
-                    <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
-                      <OrderInfo />
-                    </PrivateRoute>} />
-              {/** HR management is now integrated inside WorkshopHome (?tab=employees). Standalone route removed. **/}
-        </Routes>
-      </Router>
+        {/* CUSTOMER - CREATE ORDER */}
+        <Route
+          path="/createRepairOder"
+          element={
+            <PrivateRoute allowedRoles={['customer']}>
+              <CreateOrder />
+            </PrivateRoute>
+          }
+        />
+
+        {/* INSPECTOR HOME */}
+        <Route
+          path="/inspector"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <InspectorHome />
+            </PrivateRoute>
+          }
+        />
+
+        {/* WORKSHOP HOME */}
+        <Route
+          path="/workshop"
+          element={
+            <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+              <WorkshopHome />
+            </PrivateRoute>
+          }
+        />
+
+        {/* WORKSHOP ORDER DETAIL */}
+        <Route
+          path="/workshop/orders/:id"
+          element={
+            <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+              <OrderInfo />
+            </PrivateRoute>
+          }
+        />
+
+        {/* ACCOUNTANT */}
+        <Route
+          path="/account"
+          element={
+            <PrivateRoute allowedRoles={['accountant']}>
+              <AccountLayout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<AccountHome />} />
+          <Route path="payment" element={<PaymentList />} />
+        </Route>
+
+      </Routes>
+    </Router>
   );
 };
 

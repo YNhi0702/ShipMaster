@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Typography, Descriptions, Image, Button, Spin, message, Card, Row, Col } from 'antd';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
-import InspectorLayout from '../components/InspectorLayout';
+import { db } from '../../firebase';
+import InspectorSidebar from '../../components/Inspector/InspectorSidebar';
+import InspectorLayout from '../../components/Inspector/InspectorLayout';
 
 const LABOR_DAY_RATE = 350000; // đơn giá theo ngày công
 

@@ -1,4 +1,4 @@
-// src/components/SidebarComponent.tsx
+
 import React, { useState } from 'react';
 import { Layout, Menu, Typography, Button } from 'antd';
 import { LogoutOutlined, MenuUnfoldOutlined, MenuFoldOutlined } from '@ant-design/icons';

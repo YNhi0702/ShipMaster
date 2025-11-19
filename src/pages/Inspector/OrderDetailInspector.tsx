@@ -3,8 +3,8 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Typography, Descriptions, Image, Button, Spin, message, Form, Input, Avatar } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
-import InspectorLayout from '../components/InspectorLayout';
+import { db } from '../../firebase';
+import InspectorLayout from '../../components/Inspector/InspectorLayout';
 
 const { Title } = Typography;
 
