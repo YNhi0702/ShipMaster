@@ -37,7 +37,7 @@ const ProposalInspector: React.FC = () => {
     const [materialLines, setMaterialLines] = useState<any[]>([]); // { id, materialId, name, unit, unitPrice, qty, lineTotal }
     const [modalVisible, setModalVisible] = useState<boolean>(false);
     const [laborLines, setLaborLines] = useState<any[]>([]); // { id, employeeId?, employeeName?, description, days }
-    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string }>>([]);
+    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string; Expertise?: string }>>([]);
     const [loadingEmployees, setLoadingEmployees] = useState<boolean>(false);
     const [submitAttempted, setSubmitAttempted] = useState<boolean>(false);
 
@@ -157,6 +157,7 @@ const ProposalInspector: React.FC = () => {
                         const description = data.Description || data.description || '';
                         const employeeId = data.Employee_ID || data.employeeId || '';
                         const employeeName = data.EmployeeName || data.employeeName || '';
+                        const expertise = (data.Expertise || data.expertise || '').toString().trim();
                         return {
                             docId: d.id,
                             id: Date.now() + Math.floor(Math.random() * 1000),
@@ -164,6 +165,7 @@ const ProposalInspector: React.FC = () => {
                             employeeName,
                             description,
                             days,
+                            expertise,
                         };
                     });
                     setSavedLaborLines(lines);
@@ -194,6 +196,22 @@ const ProposalInspector: React.FC = () => {
         };
         loadEmployees();
     }, [orderData?.workshopId]);
+
+    useEffect(() => {
+        if (!workshopEmployees.length) return;
+        setSavedLaborLines(prev => {
+            let changed = false;
+            const next = prev.map(line => {
+                if (line?.expertise) return line;
+                const matched = workshopEmployees.find(e => e.id === line.employeeId);
+                const expertise = (matched?.Expertise || '').toString().trim();
+                if (!expertise) return line;
+                changed = true;
+                return { ...line, expertise };
+            });
+            return changed ? next : prev;
+        });
+    }, [workshopEmployees]);
 
     useEffect(() => {
         const fetchNames = async () => {
@@ -278,6 +296,7 @@ const ProposalInspector: React.FC = () => {
                         RepairOrder_ID: orderData.id,
                         Employee_ID: l.employeeId || null,
                         EmployeeName: l.employeeName || '',
+                        Expertise: l.expertise || '',
                         Description: l.description || '',
                         Days: Number(l.days) || 0,
                         Quantity: Number(l.days) || 0, // giữ tương thích dữ liệu cũ
@@ -306,7 +325,10 @@ const ProposalInspector: React.FC = () => {
             setExistingProposal(proposal);
             // Sau khi lưu thành công, cập nhật bản đã lưu = bản nháp
             setSavedMaterialLines(materialLines.map(l => ({ ...l })));
-            setSavedLaborLines(laborLines.map(l => ({ ...l })));
+            setSavedLaborLines(laborLines.map(l => ({
+                ...l,
+                expertise: (l?.expertise || '').toString().trim(),
+            })));
             message.success('Đã gửi đề xuất phương án thành công!');
             // Navigate to inspector home and open the 'proposal' tab
             navigate('/inspector?tab=proposal', { replace: true });
@@ -328,7 +350,7 @@ const ProposalInspector: React.FC = () => {
     const removeMaterialLine = (idx: number) => setMaterialLines(prev => prev.filter((_, i) => i !== idx));
 
     // Labor helpers
-    const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', description: '', days: 1 }]);
+    const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', description: '', days: 1, expertise: '' }]);
     const updateLaborLine = (idx: number, patch: any) => setLaborLines(prev => {
         const next = [...prev];
         next[idx] = { ...next[idx], ...patch };
@@ -379,6 +401,7 @@ const ProposalInspector: React.FC = () => {
                     <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
                     <Descriptions.Item label="Cán bộ giám định">{orderData.assignedInspector || employeeName || 'Chưa được gán'}</Descriptions.Item>
                     <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
+                    <Descriptions.Item label="Mã đơn">{orderData?.OrderCode || orderData?.orderCode || orderData?.code || id}</Descriptions.Item>
                     {orderData.description && (
                         <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>
                     )}
@@ -435,7 +458,7 @@ const ProposalInspector: React.FC = () => {
                         <div className="mb-6">
                             <Title level={5}>Phương án đã đề xuất</Title>
                             <div className="mt-3">
-                                <Input.TextArea rows={6} value={existingProposal || ''} readOnly />
+                                    <Input.TextArea rows={6} value={existingProposal || ''} readOnly />
                             </div>
 
                             <Card size="small" title="Vật liệu đề xuất" className="mt-4">
@@ -465,17 +488,19 @@ const ProposalInspector: React.FC = () => {
                             </Card>
                             <Card size="small" title="Nhân công đề xuất" className="mt-4">
                                 <Row gutter={8} className="mb-2 font-medium">
-                                    <Col span={8}><div>Nhân viên</div></Col>
-                                    <Col span={8}><div>Công việc</div></Col>
-                                    <Col span={4}><div>Số ngày</div></Col>
-                                    <Col span={4}><div>Chi phí</div></Col>
+                                    <Col span={7}><div>Nhân viên</div></Col>
+                                    <Col span={6}><div>Chuyên môn</div></Col>
+                                    <Col span={6}><div>Công việc</div></Col>
+                                    <Col span={2}><div>Số ngày</div></Col>
+                                    <Col span={3}><div>Chi phí</div></Col>
                                 </Row>
                                 {savedLaborLines.map((line, idx) => (
                                     <Row key={line.id || idx} gutter={8} className="mb-2">
-                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
-                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
-                                        <Col span={4}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
-                                        <Col span={4}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                        <Col span={7}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
+                                        <Col span={6}><div style={{ paddingTop: 6 }}>{line.expertise || '-'}</div></Col>
+                                        <Col span={6}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
+                                        <Col span={2}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                        <Col span={3}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
                                     </Row>
                                 ))}
                                 <div className="text-right font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
@@ -506,7 +531,10 @@ const ProposalInspector: React.FC = () => {
                                     // Khởi tạo bản nháp từ dữ liệu đã lưu để đảm bảo đóng modal không làm thay đổi bản lưu
                                     try {
                                         setMaterialLines(savedMaterialLines.map(l => ({ ...l })));
-                                        setLaborLines(savedLaborLines.map(l => ({ ...l })));
+                                        setLaborLines(savedLaborLines.map(l => ({
+                                            ...l,
+                                            expertise: (l?.expertise || '').toString().trim(),
+                                        })));
                                     } catch {}
                                     setSubmitAttempted(false);
                                     setModalVisible(true);
@@ -523,6 +551,8 @@ const ProposalInspector: React.FC = () => {
                         onCancel={() => setModalVisible(false)}
                         footer={null}
                         destroyOnClose
+                        width={1100}
+                        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
                     >
                         <Form
                             form={form}
@@ -591,33 +621,54 @@ const ProposalInspector: React.FC = () => {
                                         <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
                                     </div>
                                     <Row gutter={8} className="mb-2 font-medium">
-                                        <Col span={8}><div>Nhân viên</div></Col>
-                                        <Col span={8}><div>Công việc</div></Col>
-                                        <Col span={4}><div>Số ngày</div></Col>
+                                        <Col span={7}><div>Nhân viên</div></Col>
+                                        <Col span={6}><div>Chuyên môn</div></Col>
+                                        <Col span={6}><div>Công việc</div></Col>
+                                        <Col span={2}><div>Số ngày</div></Col>
                                         <Col span={2}><div>Chi phí</div></Col>
-                                        <Col span={2}></Col>
+                                        <Col span={1}></Col>
                                     </Row>
                                     {laborLines.map((line, idx) => (
                                         <Row key={line.id} gutter={8} className="mb-2">
-                                            <Col span={8}>
+                                            <Col span={7}>
                                                 <Select
                                                     showSearch
                                                     placeholder={loadingEmployees ? 'Đang tải...' : 'Chọn nhân viên'}
                                                     value={line.employeeId || undefined}
-                                                    onChange={(val, opt: any) => updateLaborLine(idx, { employeeId: val, employeeName: (opt?.label as string) || '' })}
+                                                    onChange={(val, opt: any) => {
+                                                        const expertise = ((opt?.expertise as string) || '').toString().trim();
+                                                        updateLaborLine(idx, {
+                                                            employeeId: val,
+                                                            employeeName: (opt?.label as string) || '',
+                                                            expertise,
+                                                        });
+                                                    }}
                                                     options={(function(){
                                                         const selected = new Set(laborLines.map(l => l.employeeId).filter(Boolean));
                                                         return workshopEmployees.map(e => ({
                                                             label: e.UserName || e.id,
                                                             value: e.id,
                                                             disabled: selected.has(e.id) && e.id !== line.employeeId,
+                                                            expertise: (e.Expertise || '').toString().trim(),
                                                         }));
                                                     })()}
-                                                    filterOption={(input, option) => (option?.label as string).toLowerCase().includes(input.toLowerCase())}
+                                                    filterOption={(input, option) => {
+                                                        const label = (option?.label as string) || '';
+                                                        const expertise = (option as any)?.expertise || '';
+                                                        const haystack = `${label} ${expertise}`.toLowerCase();
+                                                        return haystack.includes(input.toLowerCase());
+                                                    }}
                                                     loading={loadingEmployees}
                                                 />
                                             </Col>
-                                            <Col span={8}>
+                                            <Col span={6}>
+                                                <Input
+                                                    placeholder="Chuyên môn"
+                                                    value={line.expertise || ''}
+                                                    disabled
+                                                />
+                                            </Col>
+                                            <Col span={6}>
                                                 <Form.Item
                                                     style={{ marginBottom: 0 }}
                                                     validateStatus={submitAttempted && !String(line.description || '').trim() ? 'error' : ''}
@@ -630,13 +681,13 @@ const ProposalInspector: React.FC = () => {
                                                     />
                                                 </Form.Item>
                                             </Col>
-                                            <Col span={4}>
+                                            <Col span={2}>
                                                 <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
                                             </Col>
                                             <Col span={2}>
                                                 <div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div>
                                             </Col>
-                                            <Col span={2}>
+                                            <Col span={1}>
                                                 <Button danger size="small" onClick={() => removeLaborLine(idx)}>Xóa</Button>
                                             </Col>
                                         </Row>

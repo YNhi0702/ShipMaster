@@ -321,24 +321,24 @@ const WorkshopHome: React.FC = () => {
 
     // schedule table columns
     const scheduleColumns = [
-        { title: 'STT', key: 'stt', width: 60, render: (_: any, __: any, index: number) => index + 1 },
-    { title: 'Ngày', dataIndex: 'date', key: 'date' },
-    { title: 'Lịch bắt đầu', dataIndex: 'scheduleStart', key: 'scheduleStart' },
-    { title: 'Lịch kết thúc', dataIndex: 'scheduleEnd', key: 'scheduleEnd' },
-    { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
-    { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
-        {
-            title: 'Hành động', key: 'action', render: (_: any, record: any) => {
-                // consider it 'has schedule' only if BOTH schedule fields exist
-                const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
-                return (
-                    <Button onClick={() => openScheduleForRecord(record)}>
-                        {hasSchedule ? 'Chỉnh sửa' : 'Tạo lịch'}
-                    </Button>
-                );
-            },
-        },
-    ];
+  { title: 'STT', key: 'stt', width: 60, render: (_: any, __: any, index: number) => index + 1 },
+  { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+  { title: 'Lịch bắt đầu', dataIndex: 'scheduleStart', key: 'scheduleStart' },
+  { title: 'Lịch kết thúc', dataIndex: 'scheduleEnd', key: 'scheduleEnd' },
+  { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+  {
+    title: 'Hành động',
+    key: 'action',
+    render: (_: any, record: any) => {
+      const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
+      return (
+        <Button onClick={() => openScheduleForRecord(record)}>
+          {hasSchedule ? 'Chỉnh sửa' : 'Tạo lịch'}
+        </Button>
+      );
+    },
+  },
+];
 
     const openScheduleForRecord = (record: any) => {
         setSchedulingOrderId(record.id);
@@ -363,11 +363,11 @@ const WorkshopHome: React.FC = () => {
 
     // derive schedule rows from orders and attach a Date object for filtering
     const scheduleRows = orders.map((o) => {
-        // prefer schedule-specific fields so we don't mix order-level dates with schedule dates
+        
         let rawDateObj: Date | null = null;
         if (o.ScheduleStartDate?.toDate) rawDateObj = o.ScheduleStartDate.toDate();
         else if (o.ScheduleStartDate instanceof Date) rawDateObj = o.ScheduleStartDate;
-        // fallback to legacy StartDate (if a schedule wasn't set via new UI)
+       
         if (!rawDateObj) {
             if (o.StartDate?.toDate) rawDateObj = o.StartDate.toDate();
             else if (o.StartDate instanceof Date) rawDateObj = o.StartDate;

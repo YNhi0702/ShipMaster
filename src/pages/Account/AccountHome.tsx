@@ -62,7 +62,6 @@ const safeNumber = (value: any, fallback = 0): number => {
 const AccountHome: React.FC = () => {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loadingInvoices, setLoadingInvoices] = useState<boolean>(true);
-    const [searchValue, setSearchValue] = useState<string>('');
     const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
     const [modalLoading, setModalLoading] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
@@ -556,7 +555,7 @@ const AccountHome: React.FC = () => {
             width: 60,
             render: (_: any, __: any, index: number) => index + 1,
         },
-        { title: 'Mã đơn', dataIndex: 'orderCode', key: 'orderCode' },
+      
         { title: 'Tàu', dataIndex: 'shipName', key: 'shipName' },
         { title: 'Ngày hoàn thành', dataIndex: 'completedAt', key: 'completedAt' },
         { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
@@ -642,30 +641,12 @@ const AccountHome: React.FC = () => {
         },
     ];
 
-    const filteredInvoices = useMemo(() => {
-        if (!searchValue) return invoices;
-        const term = searchValue.toLowerCase();
-        return invoices.filter((invoice) => {
-            const haystack = [invoice.orderCode, invoice.shipName, invoice.status]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-            return haystack.includes(term);
-        });
-    }, [invoices, searchValue]);
+    const filteredInvoices = invoices;
 
     return (
         <div className="w-full overflow-x-auto">
             <div className="flex items-center justify-between mb-4">
-                <Title level={5} className="m-0">Danh sách hóa đơn</Title>
-                <Input.Search
-                    placeholder="Tìm theo mã đơn, tàu, trạng thái"
-                    allowClear
-                    onSearch={(v) => setSearchValue(v)}
-                    onChange={(e) => setSearchValue(e.target.value)}
-                    style={{ width: 360 }}
-                    value={searchValue}
-                />
+                <Title level={5} className="m-0">Danh sách chờ tạo hóa đơn</Title>
             </div>
             <Table
                 columns={columns}

@@ -133,7 +133,7 @@ const PaymentList: React.FC = () => {
             width: 60,
             render: (_: PaymentRow, __: PaymentRow, index: number) => index + 1,
         },
-        { title: 'Mã đơn', dataIndex: 'orderCode', key: 'orderCode' },
+        
         { title: 'Tàu', dataIndex: 'shipName', key: 'shipName' },
         {
             title: 'Tổng tiền',
@@ -149,7 +149,7 @@ const PaymentList: React.FC = () => {
                 <Tag color={status.toLowerCase().includes('đã') ? 'green' : 'gold'}>{status}</Tag>
             ),
         },
-        { title: 'Phương thức', dataIndex: 'paymentMethod', key: 'paymentMethod' },
+        
         { title: 'Ngày tạo hóa đơn', dataIndex: 'invoiceCreatedAt', key: 'invoiceCreatedAt' },
     ];
 
@@ -158,7 +158,7 @@ const PaymentList: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
                 <Title level={5} className="m-0">Đơn chờ thanh toán</Title>
                 <Input.Search
-                    placeholder="Tìm theo mã đơn, tàu, trạng thái"
+                    placeholder="Tìm theo tàu, trạng thái"
                     allowClear
                     onSearch={(v) => setSearchValue(v)}
                     onChange={(e) => setSearchValue(e.target.value)}

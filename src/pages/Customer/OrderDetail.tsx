@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar, Dropdown, Popconfirm } from 'antd';
 import { UserOutlined } from '@ant-design/icons';
@@ -32,6 +32,8 @@ const OrderDetail: React.FC = () => {
     const [proposalText, setProposalText] = useState<string>('');
     const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
     const [materialLines, setMaterialLines] = useState<any[]>([]);
+    const [invoiceData, setInvoiceData] = useState<any | null>(null);
+    const [invoiceLoading, setInvoiceLoading] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchOrder = async () => {
@@ -220,6 +222,78 @@ const OrderDetail: React.FC = () => {
         }
     };
 
+    const fetchInvoice = async (orderId: string) => {
+        setInvoiceLoading(true);
+        try {
+            const invoiceQuery = query(collection(db, 'invoice'), where('RepairOrder_ID', '==', orderId));
+            const invoiceSnap = await getDocs(invoiceQuery);
+            if (!invoiceSnap.empty) {
+                const firstDoc = invoiceSnap.docs[0];
+                setInvoiceData({ id: firstDoc.id, ...firstDoc.data() });
+            } else {
+                setInvoiceData(null);
+            }
+        } catch (error) {
+            console.error('Failed to load invoice for order', error);
+            message.error('Không thể tải thông tin hóa đơn.');
+        } finally {
+            setInvoiceLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        if (!orderData?.id) return;
+        fetchInvoice(orderData.id);
+    }, [orderData?.id]);
+
+    const formatCurrency = (value: any) => {
+        const numeric = typeof value === 'number' ? value : Number(value);
+        if (Number.isFinite(numeric)) {
+            return numeric.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+        }
+        return '---';
+    };
+
+    const toDisplayDateTime = (value: any) => {
+        if (!value) return '';
+        if (value instanceof Date) {
+            return isNaN(value.getTime()) ? '' : value.toLocaleString('vi-VN');
+        }
+        if (value?.toDate && typeof value.toDate === 'function') {
+            const dateVal = value.toDate();
+            return !dateVal || isNaN(dateVal.getTime()) ? '' : dateVal.toLocaleString('vi-VN');
+        }
+        if (typeof value === 'string') {
+            const parsed = new Date(value);
+            return isNaN(parsed.getTime()) ? value : parsed.toLocaleString('vi-VN');
+        }
+        if (value?.seconds) {
+            const converted = new Date(value.seconds * 1000);
+            return isNaN(converted.getTime()) ? '' : converted.toLocaleString('vi-VN');
+        }
+        return '';
+    };
+
+    const invoiceMaterialTotal = useMemo(() => {
+        if (!invoiceData?.MaterialLines) return 0;
+        return invoiceData.MaterialLines.reduce((sum: number, line: any) => sum + (Number(line.cost) || 0), 0);
+    }, [invoiceData]);
+
+    const invoiceLaborTotal = useMemo(() => {
+        if (!invoiceData?.LaborLines) return 0;
+        return invoiceData.LaborLines.reduce((sum: number, line: any) => sum + (Number(line.cost) || 0), 0);
+    }, [invoiceData]);
+
+    const invoiceGrandTotal = useMemo(() => {
+        const explicitTotal = Number(invoiceData?.TotalAmount);
+        if (Number.isFinite(explicitTotal) && explicitTotal > 0) {
+            return explicitTotal;
+        }
+        return invoiceMaterialTotal + invoiceLaborTotal;
+    }, [invoiceData, invoiceLaborTotal, invoiceMaterialTotal]);
+
+    const invoiceCreatedAtDisplay = useMemo(() => toDisplayDateTime(invoiceData?.CreatedDate) || toDisplayDateTime(invoiceData?.createdAt), [invoiceData]);
+
     if (loading || !orderData) {
         return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
     }
@@ -397,6 +471,94 @@ const OrderDetail: React.FC = () => {
                         {/* Cancel button moved to page bottom so it's visible regardless of repairplan */}
                     </div>
                 )}
+
+                {invoiceLoading ? (
+                    <Card size="small" className="mt-6">
+                        <div className="flex items-center gap-2"><Spin size="small" /> <span>Đang tải hóa đơn...</span></div>
+                    </Card>
+                ) : invoiceData ? (
+                    <Card
+                        size="small"
+                        className="mt-6"
+                        title="Hóa đơn sửa chữa"
+                    >
+                        <div className="grid gap-2 text-sm mb-4">
+                            <div className="flex justify-between"><span>Mã hóa đơn:</span><span>{invoiceData.Invoice_ID || invoiceData.id || '---'}</span></div>
+                            <div className="flex justify-between"><span>Tàu:</span><span>{shipName || orderData?.shipName || '---'}</span></div>
+                            <div className="flex justify-between"><span>Xưởng:</span><span>{workshopName || orderData?.workshopName || '---'}</span></div>
+                            <div className="flex justify-between"><span>Ngày tạo:</span><span>{invoiceCreatedAtDisplay || '---'}</span></div>
+                            <div className="flex justify-between"><span>Trạng thái thanh toán:</span><span>{invoiceData.PaymentStatus || 'Chưa thanh toán'}</span></div>
+                        </div>
+
+                        {Array.isArray(invoiceData.MaterialLines) && invoiceData.MaterialLines.length > 0 && (
+                            <div className="mb-4">
+                                <Title level={5} className="mb-2">Vật liệu</Title>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border border-gray-200">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="p-2 text-left">STT</th>
+                                                <th className="p-2 text-left">Tên vật liệu</th>
+                                                <th className="p-2 text-right">Số lượng</th>
+                                                <th className="p-2 text-right">Đơn giá</th>
+                                                <th className="p-2 text-right">Thành tiền</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {invoiceData.MaterialLines.map((line: any, index: number) => (
+                                                <tr key={line.id || index} className="border-t border-gray-200">
+                                                    <td className="p-2">{index + 1}</td>
+                                                    <td className="p-2">{line.name || line.materialId || '---'}</td>
+                                                    <td className="p-2 text-right">{line.quantity ?? 0}</td>
+                                                    <td className="p-2 text-right">{formatCurrency(line.unitPrice)}</td>
+                                                    <td className="p-2 text-right">{formatCurrency(line.cost)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="text-right font-medium mt-2">Tổng vật liệu: {formatCurrency(invoiceMaterialTotal)}</div>
+                            </div>
+                        )}
+
+                        {Array.isArray(invoiceData.LaborLines) && invoiceData.LaborLines.length > 0 && (
+                            <div className="mb-4">
+                                <Title level={5} className="mb-2">Nhân công</Title>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border border-gray-200">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="p-2 text-left">STT</th>
+                                                <th className="p-2 text-left">Nhân viên</th>
+                                                <th className="p-2 text-left">Công việc</th>
+                                                <th className="p-2 text-right">Số ngày</th>
+                                                <th className="p-2 text-right">Đơn giá</th>
+                                                <th className="p-2 text-right">Thành tiền</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {invoiceData.LaborLines.map((line: any, index: number) => (
+                                                <tr key={line.id || index} className="border-t border-gray-200">
+                                                    <td className="p-2">{index + 1}</td>
+                                                    <td className="p-2">{line.employeeName || line.employeeId || '---'}</td>
+                                                    <td className="p-2">{line.jobName || '---'}</td>
+                                                    <td className="p-2 text-right">{line.days ?? 0}</td>
+                                                    <td className="p-2 text-right">{formatCurrency(line.unitRate)}</td>
+                                                    <td className="p-2 text-right">{formatCurrency(line.cost)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div className="text-right font-medium mt-2">Tổng nhân công: {formatCurrency(invoiceLaborTotal)}</div>
+                            </div>
+                        )}
+
+                        <div className="text-right font-semibold text-base">
+                            Tổng cộng: {formatCurrency(invoiceGrandTotal)}
+                        </div>
+                    </Card>
+                ) : null}
 
                 {/* Page-level cancel button (bottom of content) */}
                 {canCancel && (
