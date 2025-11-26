@@ -25,6 +25,7 @@ import OrderInfo from "./pages/Workshop/OrderInfo";
 import AccountLayout from "./components/Account/AccountLayout";
 import AccountHome from "./pages/Account/AccountHome";
 import PaymentList from "./pages/Account/PaymentList";
+import InventoryManagement from "./pages/Account/InventoryManagement";
 
 const App: React.FC = () => {
   return (
@@ -135,6 +136,7 @@ const App: React.FC = () => {
         >
           <Route index element={<AccountHome />} />
           <Route path="payment" element={<PaymentList />} />
+          <Route path="inventory" element={<InventoryManagement />} />
         </Route>
 
       </Routes>

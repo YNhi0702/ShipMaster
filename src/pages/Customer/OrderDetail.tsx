@@ -1,13 +1,35 @@
+// src/pages/Customer/OrderDetail.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Layout, Typography, Descriptions, Image, Button, Spin, message, Avatar, Dropdown, Popconfirm } from 'antd';
-import { UserOutlined } from '@ant-design/icons';
-import { collection, query, where, getDocs, doc, getDoc, deleteDoc, updateDoc, Timestamp, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Modal, Form, Input, Row, Col, Card } from 'antd';
+import {
+    Layout,
+    Typography,
+    Descriptions,
+    Button,
+    Spin,
+    message,
+    Row,
+    Col,
+    Card,
+    Popconfirm,
+    Input,
+} from 'antd';
+import {
+    collection,
+    query,
+    where,
+    getDocs,
+    doc,
+    getDoc,
+    deleteDoc,
+    updateDoc,
+    Timestamp,
+} from 'firebase/firestore';
 import { db } from '../../firebase';
 import CustomerLayout from '../../components/Customer/CustomerLayout';
+import RepairPlanModal from '../../components/Customer/RepairPlanModal';
+import ReproposalModal from '../../components/Customer/ReproposalModal';
 
-const { Header, Content } = Layout;
 const { Title } = Typography;
 
 const OrderDetail: React.FC = () => {
@@ -24,17 +46,21 @@ const OrderDetail: React.FC = () => {
     const [loadingUser, setLoadingUser] = useState(true);
     const [canceling, setCanceling] = useState(false);
     const [accepting, setAccepting] = useState(false);
+
     const [reproposalModalVisible, setReproposalModalVisible] = useState(false);
     const [reproposalSubmitting, setReproposalSubmitting] = useState(false);
-    const [reproposalForm] = Form.useForm();
+
     const [proposalModalVisible, setProposalModalVisible] = useState(false);
-    const [proposalSubmitting, setProposalSubmitting] = useState(false);
-    const [proposalText, setProposalText] = useState<string>('');
+
     const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
     const [materialLines, setMaterialLines] = useState<any[]>([]);
+
     const [invoiceData, setInvoiceData] = useState<any | null>(null);
     const [invoiceLoading, setInvoiceLoading] = useState<boolean>(false);
 
+    // ─────────────────────────────────────────────
+    // Load đơn + thông tin khách hàng
+    // ─────────────────────────────────────────────
     useEffect(() => {
         const fetchOrder = async () => {
             const uid = sessionStorage.getItem('uid');
@@ -57,6 +83,7 @@ const OrderDetail: React.FC = () => {
                 setLoadingUser(false);
             }
 
+            // Nếu không truyền state, load từ Firestore
             if (!state && id) {
                 try {
                     setLoading(true);
@@ -84,24 +111,33 @@ const OrderDetail: React.FC = () => {
         fetchOrder();
     }, [state, id, navigate]);
 
-    // load material catalog for modal
+    // ─────────────────────────────────────────────
+    // Load catalog vật liệu
+    // ─────────────────────────────────────────────
     useEffect(() => {
         const loadCatalog = async () => {
             try {
                 const mats = await getDocs(collection(db, 'material'));
                 setMaterialsCatalog(mats.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
-            } catch (e) { /* ignore */ }
+            } catch {
+                // ignore
+            }
         };
         loadCatalog();
     }, []);
 
-    // load existing repairordermaterial for this order into materialLines
+    // ─────────────────────────────────────────────
+    // Load vật liệu đã lưu của đơn
+    // ─────────────────────────────────────────────
     useEffect(() => {
         const loadExisting = async () => {
             if (!orderData?.id) return;
             try {
-                const q = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
-                const snap = await getDocs(q);
+                const qRef = query(
+                    collection(db, 'repairordermaterial'),
+                    where('RepairOrder_ID', '==', orderData.id)
+                );
+                const snap = await getDocs(qRef);
                 if (!snap.empty) {
                     const lines = snap.docs.map(d => {
                         const data = d.data() as any;
@@ -129,7 +165,9 @@ const OrderDetail: React.FC = () => {
         loadExisting();
     }, [orderData, materialsCatalog]);
 
-    // load ship/workshop/inspector names for display (customer view)
+    // ─────────────────────────────────────────────
+    // Load tên tàu / xưởng / giám định viên
+    // ─────────────────────────────────────────────
     useEffect(() => {
         const fetchNames = async () => {
             if (!orderData) return;
@@ -162,11 +200,17 @@ const OrderDetail: React.FC = () => {
                 setWorkshopName('');
             }
 
-            // Inspector / assigned employee name (optional)
+            // Inspector / assigned employee name
             try {
                 if (orderData.inspectorId) {
                     const employeeSnap = await getDoc(doc(db, 'employees', orderData.inspectorId));
-                    setEmployeeName(employeeSnap.exists() ? (employeeSnap.data().fullName || employeeSnap.data().UserName || orderData.inspectorId) : orderData.inspectorId);
+                    setEmployeeName(
+                        employeeSnap.exists()
+                            ? (employeeSnap.data().fullName ||
+                                employeeSnap.data().UserName ||
+                                orderData.inspectorId)
+                            : orderData.inspectorId
+                    );
                 } else if (orderData.assignedInspector) {
                     setEmployeeName(orderData.assignedInspector);
                 } else {
@@ -179,53 +223,29 @@ const OrderDetail: React.FC = () => {
         fetchNames();
     }, [orderData]);
 
-    const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
-    // Use persisted costs if available on the order, otherwise fall back to computed values
+    // ─────────────────────────────────────────────
+    // Chi phí vật liệu / nhân công (từ order)
+    // ─────────────────────────────────────────────
+    const materialsCost = materialLines.reduce(
+        (s, x) => s + (Number(x.lineTotal) || 0),
+        0
+    );
+
     const savedMaterialsCost = Number(orderData?.materialsCost) || materialsCost;
     const savedLaborCost = Number(orderData?.laborCost) || 0;
-    const savedTotalCost = Number(orderData?.totalCost) || (savedMaterialsCost + savedLaborCost);
+    const savedTotalCost =
+        Number(orderData?.totalCost) || (savedMaterialsCost + savedLaborCost);
 
-    const handleSubmitProposalFromModal = async () => {
-        if (!orderData?.id) return;
-        setProposalSubmitting(true);
-        try {
-            await updateDoc(doc(db, 'repairOrder', orderData.id), {
-                repairplan: proposalText,
-                Status: 'Đã đề xuất phương án',
-            });
-
-            // replace materials
-            const existingQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
-            const existingSnap = await getDocs(existingQuery);
-            for (const ed of existingSnap.docs) {
-                try { await deleteDoc(doc(db, 'repairordermaterial', ed.id)); } catch (e) { console.error('del failed', e); }
-            }
-            for (const m of materialLines) {
-                if (!m.materialId) continue;
-                await addDoc(collection(db, 'repairordermaterial'), {
-                    RepairOrder_ID: orderData.id,
-                    Material_ID: m.materialId,
-                    QuantityUsed: Number(m.qty) || 0,
-                    createdAt: serverTimestamp(),
-                });
-            }
-
-            message.success('Đã gửi đề xuất phương án thành công!');
-            setProposalModalVisible(false);
-            // refresh page or navigate
-            setTimeout(() => navigate('/'), 1200);
-        } catch (e) {
-            console.error(e);
-            message.error('Lỗi khi gửi đề xuất.');
-        } finally {
-            setProposalSubmitting(false);
-        }
-    };
-
+    // ─────────────────────────────────────────────
+    // Hóa đơn
+    // ─────────────────────────────────────────────
     const fetchInvoice = async (orderId: string) => {
         setInvoiceLoading(true);
         try {
-            const invoiceQuery = query(collection(db, 'invoice'), where('RepairOrder_ID', '==', orderId));
+            const invoiceQuery = query(
+                collection(db, 'invoice'),
+                where('RepairOrder_ID', '==', orderId)
+            );
             const invoiceSnap = await getDocs(invoiceQuery);
             if (!invoiceSnap.empty) {
                 const firstDoc = invoiceSnap.docs[0];
@@ -249,7 +269,10 @@ const OrderDetail: React.FC = () => {
     const formatCurrency = (value: any) => {
         const numeric = typeof value === 'number' ? value : Number(value);
         if (Number.isFinite(numeric)) {
-            return numeric.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' });
+            return numeric.toLocaleString('vi-VN', {
+                style: 'currency',
+                currency: 'VND',
+            });
         }
         return '---';
     };
@@ -261,7 +284,9 @@ const OrderDetail: React.FC = () => {
         }
         if (value?.toDate && typeof value.toDate === 'function') {
             const dateVal = value.toDate();
-            return !dateVal || isNaN(dateVal.getTime()) ? '' : dateVal.toLocaleString('vi-VN');
+            return !dateVal || isNaN(dateVal.getTime())
+                ? ''
+                : dateVal.toLocaleString('vi-VN');
         }
         if (typeof value === 'string') {
             const parsed = new Date(value);
@@ -269,19 +294,27 @@ const OrderDetail: React.FC = () => {
         }
         if (value?.seconds) {
             const converted = new Date(value.seconds * 1000);
-            return isNaN(converted.getTime()) ? '' : converted.toLocaleString('vi-VN');
+            return isNaN(converted.getTime())
+                ? ''
+                : converted.toLocaleString('vi-VN');
         }
         return '';
     };
 
     const invoiceMaterialTotal = useMemo(() => {
         if (!invoiceData?.MaterialLines) return 0;
-        return invoiceData.MaterialLines.reduce((sum: number, line: any) => sum + (Number(line.cost) || 0), 0);
+        return invoiceData.MaterialLines.reduce(
+            (sum: number, line: any) => sum + (Number(line.cost) || 0),
+            0
+        );
     }, [invoiceData]);
 
     const invoiceLaborTotal = useMemo(() => {
         if (!invoiceData?.LaborLines) return 0;
-        return invoiceData.LaborLines.reduce((sum: number, line: any) => sum + (Number(line.cost) || 0), 0);
+        return invoiceData.LaborLines.reduce(
+            (sum: number, line: any) => sum + (Number(line.cost) || 0),
+            0
+        );
     }, [invoiceData]);
 
     const invoiceGrandTotal = useMemo(() => {
@@ -292,15 +325,41 @@ const OrderDetail: React.FC = () => {
         return invoiceMaterialTotal + invoiceLaborTotal;
     }, [invoiceData, invoiceLaborTotal, invoiceMaterialTotal]);
 
-    const invoiceCreatedAtDisplay = useMemo(() => toDisplayDateTime(invoiceData?.CreatedDate) || toDisplayDateTime(invoiceData?.createdAt), [invoiceData]);
+    const invoiceCreatedAtDisplay = useMemo(
+        () =>
+            toDisplayDateTime(invoiceData?.CreatedDate) ||
+            toDisplayDateTime(invoiceData?.createdAt),
+        [invoiceData]
+    );
 
+    // ─────────────────────────────────────────────
+    // Loading guard
+    // ─────────────────────────────────────────────
     if (loading || !orderData) {
-        return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
+        return (
+            <div className="p-6">
+                <Spin /> Đang tải dữ liệu...
+            </div>
+        );
     }
 
-    const { createdAt, Status, description, imageList = {}, repairplan } = orderData;
 
-    // normalize helper to compare Vietnamese status strings reliably
+
+    // ─────────────────────────────────────────────
+    // Destructure từ orderData
+    // ─────────────────────────────────────────────
+    const { createdAt, Status, description, repairplan } = orderData;
+
+    // ⭐ Quan trọng: Lấy text phương án đề xuất (giám định viên)
+    // Ưu tiên `repairplan`, fallback các field khác nếu có
+    const proposal: string =
+        orderData?.repairplan ||
+        orderData?.proposal ||
+        orderData?.repairPlan ||
+        orderData?.RepairPlan ||
+        '';
+
+    // normalize helper
     const normalize = (str: any) =>
         String(str || '')
             .normalize('NFD')
@@ -318,28 +377,17 @@ const OrderDetail: React.FC = () => {
     ]);
     const canCancel = showCancelFor.has(statusNorm);
 
-    // 👉 Menu dropdown đăng xuất
-    const menuItems = [
-        { key: 'logout', label: 'Đăng xuất' },
-    ];
-
-    const handleMenuClick = ({ key }: { key: string }) => {
-        if (key === 'logout') {
-            sessionStorage.clear();
-            navigate('/login');
-        }
-    };
-
+    // ─────────────────────────────────────────────
+    // Actions
+    // ─────────────────────────────────────────────
     const handleAcceptRepair = async () => {
         if (!id) return;
         setAccepting(true);
         try {
-            // set status to scheduling phase so workshop can arrange schedule
             await updateDoc(doc(db, 'repairOrder', id), {
                 Status: 'Sắp xếp lịch sửa chữa',
             });
             message.success('Đã đồng ý — chuyển sang bước sắp xếp lịch.');
-            // navigate back to home so the user returns to the main list
             navigate('/');
         } catch (error) {
             message.error('Lỗi khi đồng ý sửa chữa.');
@@ -364,8 +412,6 @@ const OrderDetail: React.FC = () => {
             await updateDoc(doc(db, 'repairOrder', id), payload);
             message.success('Đã gửi yêu cầu đề xuất lại.');
             setReproposalModalVisible(false);
-            reproposalForm.resetFields();
-            // navigate back to home so the user returns to the main list
             navigate('/');
         } catch (e) {
             message.error('Lỗi khi gửi yêu cầu.');
@@ -378,18 +424,25 @@ const OrderDetail: React.FC = () => {
         if (!id) return;
         setCanceling(true);
         try {
-            // delete related repairordermaterial documents first
+            // Xoá vật liệu liên quan
             try {
-                const existingQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', id));
+                const existingQuery = query(
+                    collection(db, 'repairordermaterial'),
+                    where('RepairOrder_ID', '==', id)
+                );
                 const existingSnap = await getDocs(existingQuery);
                 for (const ed of existingSnap.docs) {
-                    try { await deleteDoc(doc(db, 'repairordermaterial', ed.id)); } catch (e) { console.warn('Failed to delete repairordermaterial', e); }
+                    try {
+                        await deleteDoc(doc(db, 'repairordermaterial', ed.id));
+                    } catch (e) {
+                        console.warn('Failed to delete repairordermaterial', e);
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to clean up repairordermaterial', e);
             }
 
-            // delete the repairOrder document
+            // Xoá repairOrder
             await deleteDoc(doc(db, 'repairOrder', id));
             message.success('Đã xóa đơn hàng.');
             navigate('/');
@@ -401,244 +454,386 @@ const OrderDetail: React.FC = () => {
         }
     };
 
+    // ─────────────────────────────────────────────
+    // Render
+    // ─────────────────────────────────────────────
     return (
         <CustomerLayout userName={userName} loadingUser={loadingUser}>
-                <div className="flex justify-between items-center mb-4">
-                    <Title level={4} className="m-0">Chi tiết đơn sửa chữa</Title>
-                    <div className="flex items-center gap-3">
-                        <Button onClick={() => navigate(-1)}>Quay lại</Button>
-                    </div>
+            <div className="flex justify-between items-center mb-4">
+                <Title level={4} className="m-0">
+                    Chi tiết đơn sửa chữa
+                </Title>
+                <div className="flex items-center gap-3">
+                    <Button onClick={() => navigate(-1)}>Quay lại</Button>
                 </div>
+            </div>
 
-                <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
-                    <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
-                    <Descriptions.Item label="Cán bộ giám định">{employeeName || 'Chưa được gán'}</Descriptions.Item>
-                    <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
-                    {description && <Descriptions.Item label="Mô tả">{description}</Descriptions.Item>}
-                </Descriptions>
+            <Descriptions title="Thông tin đơn" bordered column={1}>
+                <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
+                <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
+                <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
+                <Descriptions.Item label="Cán bộ giám định">
+                    {employeeName || 'Chưa được gán'}
+                </Descriptions.Item>
+                <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
+                {description && (
+                    <Descriptions.Item label="Mô tả">
+                        {description}
+                    </Descriptions.Item>
+                )}
+            </Descriptions>
 
-                {repairplan && (
-                    <div className="mt-6">
-                        <div className="flex justify-between items-start">
-                            <Title level={4} className="m-0">Phương án sửa chữa</Title>
+            {/* Phần phương án đã đề xuất (trên page) */}
+            {repairplan && (
+                <div className="mt-6">
+                    <div className="flex justify-between items-start">
+                        <Title level={4} className="m-0">
+                            Phương án sửa chữa
+                        </Title>
 
-                            {isProposed && (
-                                <div className="flex gap-3">
-                                    <Button type="primary" loading={accepting} onClick={handleAcceptRepair}>Đồng ý</Button>
-                                    <Button onClick={() => setReproposalModalVisible(true)}>Đề xuất lại</Button>
-                                </div>
-                            )}
-                        </div>
+                        {isProposed && (
+                            <div className="flex gap-3">
+                                <Button
+                                    type="primary"
+                                    loading={accepting}
+                                    onClick={handleAcceptRepair}
+                                >
+                                    Đồng ý
+                                </Button>
+                                <Button
+                                    onClick={() => setReproposalModalVisible(true)}
+                                >
+                                    Đề xuất lại
+                                </Button>
+                            </div>
+                        )}
+                    </div>
 
-                        <div className="mt-3">
-                            <Input.TextArea rows={6} value={repairplan || ''} readOnly />
-                        </div>
+                    <div className="mt-3">
+                        <Input.TextArea
+                            rows={6}
+                            value={repairplan || ''}
+                            readOnly
+                        />
+                    </div>
 
-                        <Card size="small" title="Vật liệu đề xuất" className="mt-4">
-                            <Row gutter={8} className="mb-2 font-medium">
-                                <Col span={12}><div>Tên</div></Col>
-                                <Col span={6}><div>Số lượng</div></Col>
-                                <Col span={4}><div>Chi phí</div></Col>
+                    <Card size="small" title="Vật liệu đề xuất" className="mt-4">
+                        <Row gutter={8} className="mb-2 font-medium">
+                            <Col span={12}>
+                                <div>Tên</div>
+                            </Col>
+                            <Col span={6}>
+                                <div>Số lượng</div>
+                            </Col>
+                            <Col span={4}>
+                                <div>Chi phí</div>
+                            </Col>
+                            <Col span={2} />
+                        </Row>
+
+                        {materialLines.map((line, idx) => (
+                            <Row
+                                key={line.id || idx}
+                                gutter={8}
+                                className="mb-2"
+                            >
+                                <Col span={12}>
+                                    <div style={{ paddingTop: 6 }}>
+                                        {line.name ||
+                                            line.materialId ||
+                                            'Vật liệu'}
+                                    </div>
+                                </Col>
+                                <Col span={6}>
+                                    <div style={{ paddingTop: 6 }}>
+                                        {line.qty}
+                                    </div>
+                                </Col>
+                                <Col span={4}>
+                                    <div style={{ paddingTop: 6 }}>
+                                        {(Number(line.lineTotal) || 0).toLocaleString(
+                                            'vi-VN'
+                                        )}{' '}
+                                        đ
+                                    </div>
+                                </Col>
                                 <Col span={2} />
                             </Row>
+                        ))}
 
-                            {materialLines.map((line, idx) => (
-                                <Row key={line.id || idx} gutter={8} className="mb-2">
-                                    <Col span={12}>
-                                        <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
-                                    </Col>
-                                    <Col span={6}>
-                                        <div style={{ paddingTop: 6 }}>{line.qty}</div>
-                                    </Col>
-                                    <Col span={4}>
-                                        <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
-                                    </Col>
-                                    <Col span={2} />
-                                </Row>
-                            ))}
-
-                            <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
-                        </Card>
-
-                        {/* Chi phí tổng hợp */}
-                        <div className="mt-2 text-right">
-                            <div className="font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
-                            <div className="font-semibold mt-1">Tổng chi phí: {savedTotalCost.toLocaleString('vi-VN')} đ</div>
+                        <div className="text-right font-medium">
+                            Chi phí vật liệu:{' '}
+                            {savedMaterialsCost.toLocaleString('vi-VN')} đ
                         </div>
+                    </Card>
 
-                        {/* Cancel button moved to page bottom so it's visible regardless of repairplan */}
+                    {/* Chi phí tổng hợp */}
+                    <div className="mt-2 text-right">
+                        <div className="font-medium">
+                            Chi phí nhân công:{' '}
+                            {savedLaborCost.toLocaleString('vi-VN')} đ
+                        </div>
+                        <div className="font-semibold mt-1">
+                            Tổng chi phí:{' '}
+                            {savedTotalCost.toLocaleString('vi-VN')} đ
+                        </div>
                     </div>
-                )}
+                </div>
+            )}
 
-                {invoiceLoading ? (
-                    <Card size="small" className="mt-6">
-                        <div className="flex items-center gap-2"><Spin size="small" /> <span>Đang tải hóa đơn...</span></div>
-                    </Card>
-                ) : invoiceData ? (
-                    <Card
-                        size="small"
-                        className="mt-6"
-                        title="Hóa đơn sửa chữa"
-                    >
-                        <div className="grid gap-2 text-sm mb-4">
-                            <div className="flex justify-between"><span>Mã hóa đơn:</span><span>{invoiceData.Invoice_ID || invoiceData.id || '---'}</span></div>
-                            <div className="flex justify-between"><span>Tàu:</span><span>{shipName || orderData?.shipName || '---'}</span></div>
-                            <div className="flex justify-between"><span>Xưởng:</span><span>{workshopName || orderData?.workshopName || '---'}</span></div>
-                            <div className="flex justify-between"><span>Ngày tạo:</span><span>{invoiceCreatedAtDisplay || '---'}</span></div>
-                            <div className="flex justify-between"><span>Trạng thái thanh toán:</span><span>{invoiceData.PaymentStatus || 'Chưa thanh toán'}</span></div>
+            {/* Hóa đơn */}
+            {invoiceLoading ? (
+                <Card size="small" className="mt-6">
+                    <div className="flex items-center gap-2">
+                        <Spin size="small" />{' '}
+                        <span>Đang tải hóa đơn...</span>
+                    </div>
+                </Card>
+            ) : invoiceData ? (
+                <Card size="small" className="mt-6" title="Hóa đơn sửa chữa">
+                    <div className="grid gap-2 text-sm mb-4">
+                        <div className="flex justify-between">
+                            <span>Mã hóa đơn:</span>
+                            <span>
+                                {invoiceData.Invoice_ID ||
+                                    invoiceData.id ||
+                                    '---'}
+                            </span>
                         </div>
+                        <div className="flex justify-between">
+                            <span>Tàu:</span>
+                            <span>
+                                {shipName ||
+                                    orderData?.shipName ||
+                                    '---'}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Xưởng:</span>
+                            <span>
+                                {workshopName ||
+                                    orderData?.workshopName ||
+                                    '---'}
+                            </span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Ngày tạo:</span>
+                            <span>{invoiceCreatedAtDisplay || '---'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Trạng thái thanh toán:</span>
+                            <span>
+                                {invoiceData.PaymentStatus ||
+                                    'Chưa thanh toán'}
+                            </span>
+                        </div>
+                    </div>
 
-                        {Array.isArray(invoiceData.MaterialLines) && invoiceData.MaterialLines.length > 0 && (
+                    {Array.isArray(invoiceData.MaterialLines) &&
+                        invoiceData.MaterialLines.length > 0 && (
                             <div className="mb-4">
-                                <Title level={5} className="mb-2">Vật liệu</Title>
+                                <Title level={5} className="mb-2">
+                                    Vật liệu
+                                </Title>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm border border-gray-200">
                                         <thead className="bg-gray-100">
                                             <tr>
-                                                <th className="p-2 text-left">STT</th>
-                                                <th className="p-2 text-left">Tên vật liệu</th>
-                                                <th className="p-2 text-right">Số lượng</th>
-                                                <th className="p-2 text-right">Đơn giá</th>
-                                                <th className="p-2 text-right">Thành tiền</th>
+                                                <th className="p-2 text-left">
+                                                    STT
+                                                </th>
+                                                <th className="p-2 text-left">
+                                                    Tên vật liệu
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Số lượng
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Đơn giá
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Thành tiền
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {invoiceData.MaterialLines.map((line: any, index: number) => (
-                                                <tr key={line.id || index} className="border-t border-gray-200">
-                                                    <td className="p-2">{index + 1}</td>
-                                                    <td className="p-2">{line.name || line.materialId || '---'}</td>
-                                                    <td className="p-2 text-right">{line.quantity ?? 0}</td>
-                                                    <td className="p-2 text-right">{formatCurrency(line.unitPrice)}</td>
-                                                    <td className="p-2 text-right">{formatCurrency(line.cost)}</td>
-                                                </tr>
-                                            ))}
+                                            {invoiceData.MaterialLines.map(
+                                                (line: any, index: number) => (
+                                                    <tr
+                                                        key={
+                                                            line.id ||
+                                                            index
+                                                        }
+                                                        className="border-t border-gray-200"
+                                                    >
+                                                        <td className="p-2">
+                                                            {index + 1}
+                                                        </td>
+                                                        <td className="p-2">
+                                                            {line.name ||
+                                                                line.materialId ||
+                                                                '---'}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {line.quantity ??
+                                                                0}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {formatCurrency(
+                                                                line.unitPrice
+                                                            )}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {formatCurrency(
+                                                                line.cost
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="text-right font-medium mt-2">Tổng vật liệu: {formatCurrency(invoiceMaterialTotal)}</div>
+                                <div className="text-right font-medium mt-2">
+                                    Tổng vật liệu:{' '}
+                                    {formatCurrency(invoiceMaterialTotal)}
+                                </div>
                             </div>
                         )}
 
-                        {Array.isArray(invoiceData.LaborLines) && invoiceData.LaborLines.length > 0 && (
+                    {Array.isArray(invoiceData.LaborLines) &&
+                        invoiceData.LaborLines.length > 0 && (
                             <div className="mb-4">
-                                <Title level={5} className="mb-2">Nhân công</Title>
+                                <Title level={5} className="mb-2">
+                                    Nhân công
+                                </Title>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm border border-gray-200">
                                         <thead className="bg-gray-100">
                                             <tr>
-                                                <th className="p-2 text-left">STT</th>
-                                                <th className="p-2 text-left">Nhân viên</th>
-                                                <th className="p-2 text-left">Công việc</th>
-                                                <th className="p-2 text-right">Số ngày</th>
-                                                <th className="p-2 text-right">Đơn giá</th>
-                                                <th className="p-2 text-right">Thành tiền</th>
+                                                <th className="p-2 text-left">
+                                                    STT
+                                                </th>
+                                                <th className="p-2 text-left">
+                                                    Nhân viên
+                                                </th>
+                                                <th className="p-2 text-left">
+                                                    Công việc
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Số ngày
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Đơn giá
+                                                </th>
+                                                <th className="p-2 text-right">
+                                                    Thành tiền
+                                                </th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {invoiceData.LaborLines.map((line: any, index: number) => (
-                                                <tr key={line.id || index} className="border-t border-gray-200">
-                                                    <td className="p-2">{index + 1}</td>
-                                                    <td className="p-2">{line.employeeName || line.employeeId || '---'}</td>
-                                                    <td className="p-2">{line.jobName || '---'}</td>
-                                                    <td className="p-2 text-right">{line.days ?? 0}</td>
-                                                    <td className="p-2 text-right">{formatCurrency(line.unitRate)}</td>
-                                                    <td className="p-2 text-right">{formatCurrency(line.cost)}</td>
-                                                </tr>
-                                            ))}
+                                            {invoiceData.LaborLines.map(
+                                                (line: any, index: number) => (
+                                                    <tr
+                                                        key={
+                                                            line.id ||
+                                                            index
+                                                        }
+                                                        className="border-t border-gray-200"
+                                                    >
+                                                        <td className="p-2">
+                                                            {index + 1}
+                                                        </td>
+                                                        <td className="p-2">
+                                                            {line.employeeName ||
+                                                                line.employeeId ||
+                                                                '---'}
+                                                        </td>
+                                                        <td className="p-2">
+                                                            {line.jobName ||
+                                                                '---'}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {line.days ??
+                                                                0}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {formatCurrency(
+                                                                line.unitRate
+                                                            )}
+                                                        </td>
+                                                        <td className="p-2 text-right">
+                                                            {formatCurrency(
+                                                                line.cost
+                                                            )}
+                                                        </td>
+                                                    </tr>
+                                                )
+                                            )}
                                         </tbody>
                                     </table>
                                 </div>
-                                <div className="text-right font-medium mt-2">Tổng nhân công: {formatCurrency(invoiceLaborTotal)}</div>
+                                <div className="text-right font-medium mt-2">
+                                    Tổng nhân công:{' '}
+                                    {formatCurrency(invoiceLaborTotal)}
+                                </div>
                             </div>
                         )}
 
-                        <div className="text-right font-semibold text-base">
-                            Tổng cộng: {formatCurrency(invoiceGrandTotal)}
-                        </div>
-                    </Card>
-                ) : null}
+                    <div className="text-right font-semibold text-base">
+                        Tổng cộng: {formatCurrency(invoiceGrandTotal)}
+                    </div>
+                </Card>
+            ) : null}
 
-                {/* Page-level cancel button (bottom of content) */}
-                {canCancel && (
-                    <div className="mt-8 flex justify-end">
-                        <Popconfirm
-                            title="Bạn có chắc muốn xoá đơn này? Hành động này không thể hoàn tác."
-                            onConfirm={handleCancelOrder}
-                            okText="Xoá"
-                            cancelText="Huỷ"
+            {/* Nút hủy + Nút mở modal Phương án sửa chữa */}
+            {canCancel && (
+                <div className="mt-8 flex justify-end gap-3">
+                    {isProposed && (
+                        <Button
+                            type="primary"
+                            onClick={() => setProposalModalVisible(true)}
                         >
-                            <Button danger loading={canceling}>Hủy đơn</Button>
-                        </Popconfirm>
-                    </div>
-                )}
-                <Modal
-                    title="Phương án sửa chữa đơn hàng"
-                    visible={proposalModalVisible}
-                    onCancel={() => setProposalModalVisible(false)}
-                    footer={null}
-                    destroyOnClose
-                >
-                    <Form layout="vertical">
-                        <Form.Item>
-                            {}
-                            <Input.TextArea rows={6} value={proposalText} readOnly />
-                        </Form.Item>
+                            Phương án sửa chữa
+                        </Button>
+                    )}
 
-                        <Form.Item>
-                            <Card size="small" title="Vật liệu đề xuất" className="mb-4">
-                                {/* Header row */}
-                                <Row gutter={8} className="mb-2 font-medium">
-                                    <Col span={12}><div>Tên</div></Col>
-                                    <Col span={6}><div>Số lượng</div></Col>
-                                    <Col span={4}><div>Chi phí</div></Col>
-                                    <Col span={2} />
-                                </Row>
+                    <Popconfirm
+                        title="Bạn có chắc muốn xoá đơn này? Hành động này không thể hoàn tác."
+                        onConfirm={handleCancelOrder}
+                        okText="Xoá"
+                        cancelText="Huỷ"
+                    >
+                        <Button danger loading={canceling}>
+                            Hủy đơn
+                        </Button>
+                    </Popconfirm>
+                </div>
+            )}
 
-                                {materialLines.map((line, idx) => (
-                                    <Row key={line.id} gutter={8} className="mb-2">
-                                        <Col span={12}>
-                                            <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
-                                        </Col>
-                                        <Col span={6}>
-                                            <div style={{ paddingTop: 6 }}>{line.qty}</div>
-                                        </Col>
-                                        <Col span={4}>
-                                            <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
-                                        </Col>
-                                        <Col span={2} />
-                                    </Row>
-                                ))}
+            {/* 🔹 Modal phương án sửa chữa (hiển thị repairplan + vật liệu) */}
+            <RepairPlanModal
+                visible={proposalModalVisible}
+                onClose={() => setProposalModalVisible(false)}
+                onReproposal={() => {
+                    setProposalModalVisible(false);
+                    setReproposalModalVisible(true);
+                }}
+                onAcceptRepair={handleAcceptRepair}
+                proposalText={proposal}           // ✅ luôn dùng text phương án từ giám định viên
+                materialLines={materialLines}
+                savedMaterialsCost={savedMaterialsCost}
+                savedLaborCost={savedLaborCost}
+                savedTotalCost={savedTotalCost}
+            />
 
-                                <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
-                            </Card>
-
-                            {/* Tổng hợp chi phí trong modal */}
-                            <div className="mt-2 text-right">
-                                <div className="font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
-                                <div className="font-semibold mt-1">Tổng chi phí: {savedTotalCost.toLocaleString('vi-VN')} đ</div>
-                            </div>
-
-                            <div style={{ textAlign: 'right' }}>
-                                <Button onClick={() => setProposalModalVisible(false)}>Đóng</Button>
-                            </div>
-                        </Form.Item>
-                    </Form>
-                </Modal>
-                <Modal
-                    title="Yêu cầu đề xuất lại"
-                    visible={reproposalModalVisible}
-                    onCancel={() => setReproposalModalVisible(false)}
-                    onOk={() => reproposalForm.submit()}
-                    confirmLoading={reproposalSubmitting}
-                >
-                    <Form form={reproposalForm} onFinish={(values) => handleRequestReproposal(values.reason)} layout="vertical">
-                        <Form.Item name="reason" label="Lý do" rules={[{ required: true, message: 'Vui lòng nhập lý do yêu cầu đề xuất lại' }] }>
-                            <Input.TextArea rows={4} placeholder="Nhập yêu cầu đề xuất (bắt buộc)" />
-                        </Form.Item>
-                    </Form>
-                </Modal>
+            {/* 🔹 Modal yêu cầu đề xuất lại */}
+            <ReproposalModal
+                visible={reproposalModalVisible}
+                submitting={reproposalSubmitting}
+                onCancel={() => setReproposalModalVisible(false)}
+                onSubmit={handleRequestReproposal}
+            />
         </CustomerLayout>
     );
 };

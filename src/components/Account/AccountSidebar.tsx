@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
-import { DollarCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CreditCardOutlined } from '@ant-design/icons';
+import { DollarCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CreditCardOutlined, InboxOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Sider } = Layout;
@@ -23,6 +23,7 @@ const AccountSidebar: React.FC<AccountSidebarProps> = ({ selectedKey = 'invoices
 
         if (key === 'invoices') navigate('/account');
         if (key === 'payments') navigate('/account/payment');
+        if (key === 'inventory') navigate('/account/inventory');
     };
 
     return (
@@ -78,6 +79,11 @@ const AccountSidebar: React.FC<AccountSidebarProps> = ({ selectedKey = 'invoices
                         key: 'payments',
                         icon: <CreditCardOutlined />,
                         label: 'Thanh toán',
+                    },
+                    {
+                        key: 'inventory',
+                        icon: <InboxOutlined />,
+                        label: 'Quản lý kho',
                     },
                 ]}
             />

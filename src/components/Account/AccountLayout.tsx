@@ -57,6 +57,9 @@ const AccountLayout: React.FC<AccountLayoutProps> = ({ children }) => {
         if (location.pathname.startsWith('/account/payment')) {
             return 'payments';
         }
+        if (location.pathname.startsWith('/account/inventory')) {
+            return 'inventory';
+        }
         return 'invoices';
     }, [location.pathname]);
 
@@ -69,6 +72,7 @@ const AccountLayout: React.FC<AccountLayoutProps> = ({ children }) => {
                 onSelect={(key) => {
                     if (key === 'invoices') navigate('/account');
                     if (key === 'payments') navigate('/account/payment');
+                    if (key === 'inventory') navigate('/account/inventory');
                 }}
             />
             <Layout>
