@@ -1,10 +1,23 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Table, Typography, message, Input, Tag, Button, Modal, Form, Select, InputNumber } from 'antd';
-import { collection, getDocs, doc, getDoc, updateDoc, query, where, addDoc, serverTimestamp, runTransaction } from 'firebase/firestore';
-import { db } from '../../firebase';
+import React, { useEffect, useMemo, useState } from "react";
+import { Typography, Input, message, Form } from "antd";
+import {
+    collection,
+    getDocs,
+    doc,
+    getDoc,
+    serverTimestamp,
+    runTransaction
+} from "firebase/firestore";
+
+import PaymentTable from "../../components/Account/PaymentTable";
+import PaymentModal from "../../components/Account/PaymentModal";
+import PaymentHistoryModal from "../../components/Account/PaymentHistoryModal";
+
+import { db } from "../../firebase";
 
 const { Title } = Typography;
 
+// Type dùng trong file chính
 interface PaymentRow {
     id: string;
     orderCode: string;
@@ -16,20 +29,34 @@ interface PaymentRow {
     invoiceId?: string;
 }
 
+interface PaymentHistoryRow {
+    id: string;
+    amount: number;
+    paymentDate: string;
+    paymentMethod: string;
+    invoiceId: string;
+}
+
 const PaymentList: React.FC = () => {
     const [orders, setOrders] = useState<PaymentRow[]>([]);
+    const [paymentHistory, setPaymentHistory] = useState<PaymentHistoryRow[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
-    const [searchValue, setSearchValue] = useState<string>('');
-    const [paymentModalVisible, setPaymentModalVisible] = useState<boolean>(false);
+
+    const [searchValue, setSearchValue] = useState("");
     const [selectedOrder, setSelectedOrder] = useState<PaymentRow | null>(null);
     const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
-    const [processingPayment, setProcessingPayment] = useState<boolean>(false);
+
+    // Modal states
+    const [historyVisible, setHistoryVisible] = useState(false);
+    const [paymentVisible, setPaymentVisible] = useState(false);
+    const [processingPayment, setProcessingPayment] = useState(false);
+
     const [form] = Form.useForm();
 
     const formatCurrency = (value: number) =>
-        Number.isFinite(value) ? value.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '---';
+        value.toLocaleString("vi-VN", { style: "currency", currency: "VND" });
 
-    // =================== FETCH ORDERS ===================
+    // ================= FETCH ORDERS =================
     const fetchPaymentOrders = async () => {
         try {
             setLoading(true);
@@ -61,6 +88,7 @@ const PaymentList: React.FC = () => {
 
                     let shipName = orderData?.ShipName || orderData?.shipName || '';
 
+                    // Nếu không có tên tàu, lấy từ bảng `ship` bằng `shipId`
                     if (!shipName) {
                         try {
                             const shipId = orderData?.shipId || orderData?.ShipId;
@@ -68,10 +96,13 @@ const PaymentList: React.FC = () => {
                                 const shipSnap = await getDoc(doc(db, 'ship', shipId));
                                 if (shipSnap.exists()) {
                                     const shipData = shipSnap.data() as Record<string, any>;
-                                    shipName = shipData?.Name || shipData?.name;
+                                    shipName = shipData?.Name || shipData?.name || 'Không xác định';
                                 }
                             }
-                        } catch {}
+                        } catch (error) {
+                            console.error('Lỗi lấy tên tàu:', error);
+                            shipName = 'Không xác định';
+                        }
                     }
 
                     const invoiceData = invoiceMap.get(orderDoc.id) || null;
@@ -100,7 +131,7 @@ const PaymentList: React.FC = () => {
                     return {
                         id: orderDoc.id,
                         orderCode: orderData?.OrderCode || orderDoc.id,
-                        shipName,
+                        shipName, // Đảm bảo tên tàu được lấy đúng
                         totalAmount,
                         remainingAmount,
                         paymentStatus,
@@ -118,24 +149,51 @@ const PaymentList: React.FC = () => {
         }
     };
 
+    // ================= FETCH PAYMENT HISTORY =================
+    const fetchPaymentHistory = async () => {
+        try {
+            const snap = await getDocs(collection(db, "payment"));
+            const rows = snap.docs.map((doc) => {
+                const d = doc.data();
+
+                const paymentDate = d?.PaymentDate?.toDate
+                    ? d.PaymentDate.toDate().toLocaleDateString("vi-VN")
+                    : "---";
+
+                return {
+                    id: doc.id,
+                    amount: d.Amount,
+                    paymentDate,
+                    paymentMethod: d.PaymentMethod,
+                    invoiceId: d.Invoice_ID,
+                };
+            });
+
+            setPaymentHistory(rows);
+        } catch {
+            message.error("Lỗi tải lịch sử thanh toán!");
+        }
+    };
+
     useEffect(() => {
         fetchPaymentOrders();
+        fetchPaymentHistory();
     }, []);
 
-    // =================== HANDLE PAYMENT ===================
-    const handlePayment = async (record: PaymentRow) => {
+    // ================= HANDLE PAYMENT =================
+    const handlePay = async (record: PaymentRow) => {
         setSelectedOrder(record);
 
         if (record.invoiceId) {
-            const invSnap = await getDoc(doc(db, 'invoice', record.invoiceId));
-            if (invSnap.exists()) setSelectedInvoice({ id: invSnap.id, ...invSnap.data() });
+            const snap = await getDoc(doc(db, "invoice", record.invoiceId));
+            if (snap.exists()) setSelectedInvoice({ id: snap.id, ...snap.data() });
         }
 
         form.resetFields();
-        setPaymentModalVisible(true);
+        setPaymentVisible(true);
     };
 
-    const handleProcessPayment = async () => {
+    const submitPayment = async () => {
         try {
             if (!selectedOrder) return;
 
@@ -143,124 +201,78 @@ const PaymentList: React.FC = () => {
             const paymentAmount = Number(values.amount);
 
             if (paymentAmount <= 0) {
-                message.error('Số tiền phải lớn hơn 0');
+                message.error("Số tiền phải lớn hơn 0!");
                 return;
             }
 
             setProcessingPayment(true);
 
-            // Load invoice doc
-            let invoiceDocRef: any;
-            let invoiceData: any = {};
+            const invoiceRef = doc(db, "invoice", selectedInvoice.id);
+            const snap = await getDoc(invoiceRef);
+            const invoiceData = snap.data();
 
-            if (selectedInvoice?.id) {
-                invoiceDocRef = doc(db, 'invoice', selectedInvoice.id);
-                const snap = await getDoc(invoiceDocRef);
-                invoiceData = snap.data();
-            }
-
-            const currentRemaining = Number(
-                invoiceData?.RemainingAmount ?? selectedOrder.totalAmount
-            );
+            const currentRemaining = Number(invoiceData?.RemainingAmount ?? selectedOrder.totalAmount);
 
             if (paymentAmount > currentRemaining) {
-                message.error('Số tiền vượt quá số nợ!');
+                message.error("Số tiền vượt quá số còn lại!");
                 return;
             }
 
-            const newRemainingAmount = currentRemaining - paymentAmount;
+            const newRemain = currentRemaining - paymentAmount;
+            let newStatus = "Chưa thanh toán";
+            if (newRemain === 0) newStatus = "Đã thanh toán";
+            else if (newRemain < selectedOrder.totalAmount) newStatus = "Thanh toán một phần";
 
-            let newPaymentStatus = 'Chưa thanh toán';
-            if (newRemainingAmount === 0) newPaymentStatus = 'Đã thanh toán';
-            else if (newRemainingAmount < selectedOrder.totalAmount) newPaymentStatus = 'Thanh toán một phần';
-
-            // Run transaction
             await runTransaction(db, async (transaction) => {
-                const paymentRef = doc(collection(db, 'payment'));
+                const paymentRef = doc(collection(db, "payment"));
                 transaction.set(paymentRef, {
                     Amount: paymentAmount,
-                    Invoice_ID: invoiceDocRef.id,
+                    Invoice_ID: selectedInvoice.id,
                     PaymentDate: serverTimestamp(),
                     PaymentMethod: values.paymentMethod,
                 });
 
-                transaction.update(invoiceDocRef, {
-                    RemainingAmount: newRemainingAmount,
-                    PaymentStatus: newPaymentStatus,
+                transaction.update(invoiceRef, {
+                    RemainingAmount: newRemain,
+                    PaymentStatus: newStatus,
                 });
             });
 
-            message.success('Thanh toán thành công!');
-            setPaymentModalVisible(false);
-            form.resetFields();
+            message.success("Thanh toán thành công!");
+
+            setPaymentVisible(false);
             fetchPaymentOrders();
-        } catch (err) {
-            message.error('Không thể thanh toán!');
+            fetchPaymentHistory();
+        } catch {
+            message.error("Không thể thanh toán!");
         } finally {
             setProcessingPayment(false);
         }
     };
 
+    // ================= HISTORY FILTER =================
+    const filteredHistory = useMemo(() => {
+        if (!selectedOrder?.invoiceId) return [];
+        return paymentHistory.filter((p) => p.invoiceId === selectedOrder.invoiceId);
+    }, [selectedOrder, paymentHistory]);
+
+    // ================= SEARCH FILTER =================
     const filteredOrders = useMemo(() => {
         if (!searchValue) return orders;
-        const t = searchValue.toLowerCase();
 
-        return orders.filter((order) =>
-            [order.orderCode, order.shipName, order.paymentStatus]
-                .join(' ')
+        const q = searchValue.toLowerCase();
+        return orders.filter((o) =>
+            [o.orderCode, o.shipName, o.paymentStatus]
+                .join(" ")
                 .toLowerCase()
-                .includes(t)
+                .includes(q)
         );
     }, [orders, searchValue]);
-
-    const columns = [
-        {
-            title: 'STT',
-            render: (_: any, __: any, idx: number) => idx + 1,
-            width: 50,
-        },
-        { title: 'Tàu', dataIndex: 'shipName' },
-        {
-            title: 'Tổng tiền',
-            dataIndex: 'totalAmount',
-            render: (v: number) => formatCurrency(v),
-        },
-        {
-            title: 'Còn lại',
-            dataIndex: 'remainingAmount',
-            render: (v: number) => formatCurrency(v),
-        },
-        {
-            title: 'Trạng thái',
-            dataIndex: 'paymentStatus',
-            render: (v: string) => {
-                const l = v.toLowerCase();
-                let color = 'gold';
-                if (l.includes('đã thanh toán')) color = 'green';
-                if (l.includes('một phần')) color = 'orange';
-                return <Tag color={color}>{v}</Tag>;
-            },
-        },
-        { title: 'Ngày tạo', dataIndex: 'invoiceCreatedAt' },
-        {
-            title: 'Hành động',
-            render: (_: any, r: PaymentRow) => (
-                <Button
-                    type="primary"
-                    size="small"
-                    disabled={r.remainingAmount <= 0}
-                    onClick={() => handlePayment(r)}
-                >
-                    {r.remainingAmount > 0 ? 'Thanh toán' : 'Đã thanh toán'}
-                </Button>
-            ),
-        },
-    ];
 
     return (
         <div>
             <div className="flex justify-between mb-4">
-                <Title level={5}>Đơn chờ thanh toán</Title>
+                <Title level={5}>Danh sách hoá đơn</Title>
                 <Input.Search
                     placeholder="Tìm theo tàu hoặc trạng thái"
                     allowClear
@@ -270,59 +282,33 @@ const PaymentList: React.FC = () => {
                 />
             </div>
 
-            <Table
+            <PaymentTable
+                orders={filteredOrders}
                 loading={loading}
-                columns={columns}
-                dataSource={filteredOrders}
-                rowKey="id"
-                bordered
+                onPay={handlePay}
+                onShowHistory={(order) => {
+                    setSelectedOrder(order);
+                    setHistoryVisible(true);
+                }}
             />
 
-            <Modal
-                title="Thanh toán"
-                open={paymentModalVisible}
-                onOk={handleProcessPayment}
-                onCancel={() => setPaymentModalVisible(false)}
-                confirmLoading={processingPayment}
-            >
-                {selectedOrder && (
-                    <div className="mb-3 p-3 bg-gray-50 rounded">
-                        <p><b>Tàu:</b> {selectedOrder.shipName}</p>
-                        <p><b>Còn lại:</b> {formatCurrency(selectedOrder.remainingAmount)}</p>
-                    </div>
-                )}
+            {/* Modal xem lịch sử */}
+            <PaymentHistoryModal
+                visible={historyVisible}
+                order={selectedOrder}
+                history={filteredHistory}
+                onClose={() => setHistoryVisible(false)}
+            />
 
-                <Form form={form} layout="vertical">
-                    <Form.Item
-                        label="Số tiền thanh toán"
-                        name="amount"
-                        rules={[{ required: true, message: 'Nhập số tiền!' }]}
-                    >
-                        <InputNumber
-                            style={{ width: '100%' }}
-                            min={1}
-                            max={selectedOrder?.remainingAmount}
-                            formatter={(v) =>
-                                `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-                            }
-                            parser={(v) =>
-                                Number(v?.replace(/,/g, '') || 0)
-                            }
-                        />
-                    </Form.Item>
-
-                    <Form.Item
-                        label="Phương thức thanh toán"
-                        name="paymentMethod"
-                        rules={[{ required: true, message: 'Chọn phương thức!' }]}
-                    >
-                        <Select placeholder="Chọn phương thức">
-                            <Select.Option value="Tiền mặt">Tiền mặt</Select.Option>
-                            <Select.Option value="Chuyển khoản">Chuyển khoản</Select.Option>
-                        </Select>
-                    </Form.Item>
-                </Form>
-            </Modal>
+            {/* Modal thanh toán */}
+            <PaymentModal
+                visible={paymentVisible}
+                order={selectedOrder}
+                form={form}
+                loading={processingPayment}
+                onSubmit={submitPayment}
+                onCancel={() => setPaymentVisible(false)}
+            />
         </div>
     );
 };

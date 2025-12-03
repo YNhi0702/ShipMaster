@@ -255,11 +255,9 @@ const OrderDetailInspector: React.FC = () => {
                         <Button onClick={() => navigate(-1)}>Quay lại</Button>
                     </div>
                 <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Mã đơn">{id}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
                     <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
                     <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
-                    <Descriptions.Item label="Cán bộ giám định">{orderData.assignedInspector || employeeName || 'Chưa được gán'}</Descriptions.Item>
                     <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
                     {description && <Descriptions.Item label="Mô tả">{description}</Descriptions.Item>}
                     {priority && <Descriptions.Item label="Độ ưu tiên">{priority}</Descriptions.Item>}
@@ -299,27 +297,7 @@ const OrderDetailInspector: React.FC = () => {
                     )}
                 </Descriptions>
 
-                    {/* Employees of selected workshop with Role_ID = 5 */}
-                    <div className="mt-6 max-w-2xl">
-                        <Title level={4} className="mb-3">Nhân viên của xưởng (Role 5)</Title>
-                        {loadingEmployees ? (
-                            <div className="text-gray-500">Đang tải danh sách nhân viên...</div>
-                        ) : workshopEmployees.length === 0 ? (
-                            <div className="text-gray-500">Không có nhân viên phù hợp.</div>
-                        ) : (
-                            <div className="flex flex-col gap-3">
-                                {workshopEmployees.map(emp => (
-                                    <div key={emp.id} className="flex items-center gap-3 p-3 border rounded">
-                                        <Avatar icon={<UserOutlined />} />
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">{emp.UserName || 'Nhân viên'}</span>
-                                            <span className="text-sm text-gray-600">{emp.Phone || ''}{emp.Phone && emp.Email ? ' · ' : ''}{emp.Email || ''}</span>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
+                
 
 
                 {(customerName || customerPhone || customerEmail) && (

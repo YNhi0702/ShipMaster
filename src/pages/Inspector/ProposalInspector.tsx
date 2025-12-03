@@ -73,25 +73,25 @@ const ProposalInspector: React.FC = () => {
                     const orderSnap = await getDoc(orderRef);
                     if (orderSnap.exists()) {
                         const data = orderSnap.data();
-                            const existing = data?.repairplan || data?.proposal || '';
-                            setOrderData({
-                                id,
-                                ...data,
-                                createdAt: data?.StartDate?.toDate().toLocaleDateString('vi-VN'),
-                            });
-                            setExistingProposal(existing);
-                            setProposal(existing);
-                            // ensure the Antd form field is also populated so the textarea shows the existing proposal
-                            try {
-                                form.setFieldsValue({ proposal: existing });
-                            } catch (e) {
-                                // ignore if form not ready
-                            }
-                            // load materials catalog for material selector
-                            try {
-                                const mats = await getDocs(collection(db, 'material'));
-                                setMaterialsCatalog(mats.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
-                            } catch (e) { /* ignore */ }
+                        const existing = data?.repairplan || data?.proposal || '';
+                        setOrderData({
+                            id,
+                            ...data,
+                            createdAt: data?.StartDate?.toDate().toLocaleDateString('vi-VN'),
+                        });
+                        setExistingProposal(existing);
+                        setProposal(existing);
+                        // ensure the Antd form field is also populated so the textarea shows the existing proposal
+                        try {
+                            form.setFieldsValue({ proposal: existing });
+                        } catch (e) {
+                            // ignore if form not ready
+                        }
+                        // load materials catalog for material selector
+                        try {
+                            const mats = await getDocs(collection(db, 'material'));
+                            setMaterialsCatalog(mats.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+                        } catch (e) { /* ignore */ }
                     } else {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/inspector');
@@ -239,19 +239,19 @@ const ProposalInspector: React.FC = () => {
         fetchNames();
     }, [orderData]);
 
-
     const handleSubmitProposal = async (values: any) => {
         if (!orderData) return;
-        // Validate: all labor lines must have 'description' filled if the line exists
-        const hasEmptyJob = laborLines.some(l => (l && (String(l.description || '').trim().length === 0)));
-        if (hasEmptyJob) {
-            message.error('Vui lòng nhập công việc cho tất cả dòng nhân công.');
+
+        const incomingPlan = (values.proposal || "").toString().trim();
+        if (!incomingPlan) {
+            message.error("Vui lòng nhập phương án đề xuất!");
             return;
         }
+
         setProposalLoading(true);
         try {
             await updateDoc(doc(db, 'repairOrder', orderData.id), {
-                repairplan: proposal,
+                repairplan: incomingPlan,
                 Status: 'Đã đề xuất phương án',
             });
             // Replace existing material docs for this order with the current materialLines.
@@ -391,319 +391,315 @@ const ProposalInspector: React.FC = () => {
             userName={userName}
             loadingUser={loadingUser}
         >
-                    <div className="flex justify-between items-center mb-6">
-                        <Title level={3} className="m-0">Đề xuất phương án sửa chữa</Title>
-                        <Button onClick={() => navigate(-1)}>Quay lại</Button>
+            <div className="flex justify-between items-center mb-6">
+                <Title level={3} className="m-0">Đề xuất phương án sửa chữa</Title>
+                <Button onClick={() => navigate(-1)}>Quay lại</Button>
+            </div>
+            <Descriptions title="Thông tin đơn" bordered column={1}>
+                <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
+                <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
+                <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
+                <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
+                {orderData.description && (
+                    <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>
+                )}
+
+                {/* Thông tin tàu gộp chung trong bảng */}
+                {shipInfo?.registration_number && (
+                    <Descriptions.Item label="Số đăng ký">{shipInfo.registration_number}</Descriptions.Item>
+                )}
+                {shipInfo?.registered_port && (
+                    <Descriptions.Item label="Cảng đăng ký">{shipInfo.registered_port}</Descriptions.Item>
+                )}
+                {shipInfo?.type && (
+                    <Descriptions.Item label="Loại tàu">{shipInfo.type}</Descriptions.Item>
+                )}
+                {shipInfo?.year_built && (
+                    <Descriptions.Item label="Năm đóng tàu">{shipInfo.year_built}</Descriptions.Item>
+                )}
+                {shipInfo?.hull_material && (
+                    <Descriptions.Item label="Vật liệu vỏ">{shipInfo.hull_material}</Descriptions.Item>
+                )}
+                {shipInfo?.length_overall !== undefined && (
+                    <Descriptions.Item label="Chiều dài (m)">{shipInfo.length_overall}</Descriptions.Item>
+                )}
+                {shipInfo?.width !== undefined && (
+                    <Descriptions.Item label="Chiều rộng (m)">{shipInfo.width}</Descriptions.Item>
+                )}
+                {shipInfo?.daft !== undefined && (
+                    <Descriptions.Item label="Mớn nước (m)">{shipInfo.daft}</Descriptions.Item>
+                )}
+                {shipInfo?.main_engine_count !== undefined && (
+                    <Descriptions.Item label="Số động cơ chính">{shipInfo.main_engine_count}</Descriptions.Item>
+                )}
+                {shipInfo?.auxiliary_engines_count !== undefined && (
+                    <Descriptions.Item label="Số động cơ phụ">{shipInfo.auxiliary_engines_count}</Descriptions.Item>
+                )}
+            </Descriptions>
+
+            {/* Only show images section when there are images */}
+            {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
+                <div className="mt-6">
+                    <Title level={4}>Hình ảnh</Title>
+                    <div className="flex gap-4 flex-wrap">
+                        {Object.values(imageList as { [key: string]: string }).filter(Boolean).map((url, index) => (
+                            <Image key={index} width={200} src={url} alt={`img-${index}`} />
+                        ))}
                     </div>
-                <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
-                    <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
-                    <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
-                    <Descriptions.Item label="Cán bộ giám định">{orderData.assignedInspector || employeeName || 'Chưa được gán'}</Descriptions.Item>
-                    <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
-                    <Descriptions.Item label="Mã đơn">{orderData?.OrderCode || orderData?.orderCode || orderData?.code || id}</Descriptions.Item>
-                    {orderData.description && (
-                        <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>
-                    )}
+                </div>
+            )}
 
-                    {/* Thông tin tàu gộp chung trong bảng */}
-                    {shipInfo?.registration_number && (
-                        <Descriptions.Item label="Số đăng ký">{shipInfo.registration_number}</Descriptions.Item>
-                    )}
-                    {shipInfo?.registered_port && (
-                        <Descriptions.Item label="Cảng đăng ký">{shipInfo.registered_port}</Descriptions.Item>
-                    )}
-                    {shipInfo?.type && (
-                        <Descriptions.Item label="Loại tàu">{shipInfo.type}</Descriptions.Item>
-                    )}
-                    {shipInfo?.year_built && (
-                        <Descriptions.Item label="Năm đóng tàu">{shipInfo.year_built}</Descriptions.Item>
-                    )}
-                    {shipInfo?.hull_material && (
-                        <Descriptions.Item label="Vật liệu vỏ">{shipInfo.hull_material}</Descriptions.Item>
-                    )}
-                    {shipInfo?.length_overall !== undefined && (
-                        <Descriptions.Item label="Chiều dài (m)">{shipInfo.length_overall}</Descriptions.Item>
-                    )}
-                    {shipInfo?.width !== undefined && (
-                        <Descriptions.Item label="Chiều rộng (m)">{shipInfo.width}</Descriptions.Item>
-                    )}
-                    {shipInfo?.daft !== undefined && (
-                        <Descriptions.Item label="Mớn nước (m)">{shipInfo.daft}</Descriptions.Item>
-                    )}
-                    {shipInfo?.main_engine_count !== undefined && (
-                        <Descriptions.Item label="Số động cơ chính">{shipInfo.main_engine_count}</Descriptions.Item>
-                    )}
-                    {shipInfo?.auxiliary_engines_count !== undefined && (
-                        <Descriptions.Item label="Số động cơ phụ">{shipInfo.auxiliary_engines_count}</Descriptions.Item>
-                    )}
-                </Descriptions>
 
-                {/* Only show images section when there are images */}
-                {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
-                    <div className="mt-6">
-                        <Title level={4}>Hình ảnh</Title>
-                        <div className="flex gap-4 flex-wrap">
-                            {Object.values(imageList as { [key: string]: string }).filter(Boolean).map((url, index) => (
-                                <Image key={index} width={200} src={url} alt={`img-${index}`} />
-                            ))}
+            <div className="mt-8">
+                {/* If order already has a submitted proposal, show it (read-only) */}
+                {orderData.Status === 'Đã đề xuất phương án' && (
+                    <div className="mb-6">
+                        <Title level={5}>Phương án đã đề xuất</Title>
+                        <div className="mt-3">
+                            <Input.TextArea rows={6} value={existingProposal || ''} readOnly />
                         </div>
+
+                        <Card size="small" title="Vật liệu đề xuất" className="mt-4">
+                            <Row gutter={8} className="mb-2 font-medium">
+                                <Col span={12}><div>Tên</div></Col>
+                                <Col span={6}><div>Số lượng</div></Col>
+                                <Col span={4}><div>Chi phí</div></Col>
+                                <Col span={2} />
+                            </Row>
+
+                            {savedMaterialLines.map((line, idx) => (
+                                <Row key={line.id || idx} gutter={8} className="mb-2">
+                                    <Col span={12}>
+                                        <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                    </Col>
+                                    <Col span={6}>
+                                        <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                    </Col>
+                                    <Col span={4}>
+                                        <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
+                                    </Col>
+                                    <Col span={2} />
+                                </Row>
+                            ))}
+
+                            <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
+                        </Card>
+                        <Card size="small" title="Nhân công đề xuất" className="mt-4">
+                            <Row gutter={8} className="mb-2 font-medium">
+                                <Col span={7}><div>Nhân viên</div></Col>
+                                <Col span={6}><div>Chuyên môn</div></Col>
+                                <Col span={6}><div>Công việc</div></Col>
+                                <Col span={2}><div>Số ngày</div></Col>
+                                <Col span={3}><div>Chi phí</div></Col>
+                            </Row>
+                            {savedLaborLines.map((line, idx) => (
+                                <Row key={line.id || idx} gutter={8} className="mb-2">
+                                    <Col span={7}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
+                                    <Col span={6}><div style={{ paddingTop: 6 }}>{line.expertise || '-'}</div></Col>
+                                    <Col span={6}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
+                                    <Col span={2}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                    <Col span={3}><div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                </Row>
+                            ))}
+                            <div className="text-right font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
+                        </Card>
+                        <div className="text-right font-semibold mt-2">Tổng chi phí: {(savedMaterialsCost + savedLaborCost).toLocaleString('vi-VN')} đ</div>
                     </div>
                 )}
 
+                {/* Customer adjustment request is now loaded into the proposal textarea inside the modal (if present) */}
 
-                <div className="mt-8">
-                    {/* If order already has a submitted proposal, show it (read-only) */}
-                    {orderData.Status === 'Đã đề xuất phương án' && (
-                        <div className="mb-6">
-                            <Title level={5}>Phương án đã đề xuất</Title>
-                            <div className="mt-3">
-                                    <Input.TextArea rows={6} value={existingProposal || ''} readOnly />
-                            </div>
+                {/* Show a button that opens the modal containing the full proposal + materials form */}
+                {orderData.Status !== 'Đã đề xuất phương án' && (
+                    <div className="mb-4">
+                        <Button
+                            type="primary"
+                            size="large"
+                            onClick={() => {
+                                // If customer requested a re-proposal, show their request above the textarea (read-only)
+                                if (orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && orderData.CustomerAdjustmentRequest.text) {
+                                    const reqText = orderData.CustomerAdjustmentRequest.text;
+                                    // keep customer's request separate from the editable proposal so the inspector edits the proposal itself
+                                    setCustomerRequest(reqText);
+                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                } else {
+                                    setCustomerRequest('');
+                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                }
+                                // Khởi tạo bản nháp từ dữ liệu đã lưu để đảm bảo đóng modal không làm thay đổi bản lưu
+                                try {
+                                    setMaterialLines(savedMaterialLines.map(l => ({ ...l })));
+                                    setLaborLines(savedLaborLines.map(l => ({
+                                        ...l,
+                                        expertise: (l?.expertise || '').toString().trim(),
+                                    })));
+                                } catch { }
+                                setSubmitAttempted(false);
+                                setModalVisible(true);
+                            }}
+                        >
+                            Đề xuất
+                        </Button>
+                    </div>
+                )}
 
-                            <Card size="small" title="Vật liệu đề xuất" className="mt-4">
-                                <Row gutter={8} className="mb-2 font-medium">
-                                    <Col span={12}><div>Tên</div></Col>
-                                    <Col span={6}><div>Số lượng</div></Col>
-                                    <Col span={4}><div>Chi phí</div></Col>
-                                    <Col span={2} />
-                                </Row>
+                <Modal
+                    title="Gửi đề xuất phương án sửa chữa"
+                    visible={modalVisible}
+                    onCancel={() => setModalVisible(false)}
+                    footer={null}
+                    destroyOnClose
+                    width={1100}
+                    bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
+                >
+                    <Form
+                        form={form}
+                        layout="vertical"
+                        onFinish={async (vals) => {
+                            await handleSubmitProposal(vals);
+                        }}
 
-                                {savedMaterialLines.map((line, idx) => (
-                                    <Row key={line.id || idx} gutter={8} className="mb-2">
+                    >
+                        {/* If customer requested a re-proposal, show their request here (read-only, non-editable) */}
+                        {customerRequest && (
+                            // Show the card header and display the customer's request inside the card body (read-only)
+                            <Card size="small" title="Yêu cầu đề xuất của khách hàng" className="mb-4">
+                                <div style={{ whiteSpace: 'pre-wrap', color: 'rgba(0,0,0,0.85)' }}>{customerRequest}</div>
+                            </Card>
+                        )}
+
+                        <Form.Item
+                            label="Phương án đề xuất"
+                            name="proposal"
+                            rules={[{ required: true, message: 'Vui lòng nhập phương án đề xuất!' }]}
+                        >
+                            <Input.TextArea
+                                rows={6}
+                                placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..."
+                            />
+                        </Form.Item>
+
+                        <Form.Item>
+                            <Card size="small" title="Vật liệu đề xuất" className="mb-4">
+                                <div className="mb-2">
+                                    <Button type="dashed" onClick={addMaterialLine}>+ Thêm vật liệu</Button>
+                                </div>
+                                {materialLines.map((line, idx) => (
+                                    <Row key={line.id} gutter={8} className="mb-2">
                                         <Col span={12}>
-                                            <div style={{ paddingTop: 6 }}>{line.name || line.materialId || 'Vật liệu'}</div>
+                                            <Select
+                                                showSearch
+                                                placeholder="Chọn vật liệu"
+                                                value={line.materialId}
+                                                onChange={(val) => {
+                                                    const m = materialsCatalog.find(x => x.id === val) || { Name: '', Unit: '', Price: 0 };
+                                                    updateMaterialLine(idx, { materialId: val, name: m.Name || m.name || '', unit: m.Unit || m.unit || '', unitPrice: m.Price || m.price || 0 });
+                                                }}
+                                                options={materialsCatalog.map(m => ({ label: m.Name || m.name, value: m.id }))}
+                                            />
                                         </Col>
                                         <Col span={6}>
-                                            <div style={{ paddingTop: 6 }}>{line.qty}</div>
+                                            <InputNumber min={1} style={{ width: '100%' }} value={line.qty} onChange={(v) => updateMaterialLine(idx, { qty: Math.max(1, Number(v) || 1) })} />
                                         </Col>
                                         <Col span={4}>
                                             <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
                                         </Col>
-                                        <Col span={2} />
+                                        <Col span={2}>
+                                            <Button danger size="small" onClick={() => removeMaterialLine(idx)}>Xóa</Button>
+                                        </Col>
                                     </Row>
                                 ))}
-
-                                <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
+                                <div className="text-right font-medium">Chi phí vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
-                            <Card size="small" title="Nhân công đề xuất" className="mt-4">
+
+                            <Card size="small" title="Nhân công đề xuất" className="mb-4">
+                                <div className="mb-2">
+                                    <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
+                                </div>
                                 <Row gutter={8} className="mb-2 font-medium">
                                     <Col span={7}><div>Nhân viên</div></Col>
                                     <Col span={6}><div>Chuyên môn</div></Col>
                                     <Col span={6}><div>Công việc</div></Col>
                                     <Col span={2}><div>Số ngày</div></Col>
-                                    <Col span={3}><div>Chi phí</div></Col>
+                                    <Col span={2}><div>Chi phí</div></Col>
+                                    <Col span={1}></Col>
                                 </Row>
-                                {savedLaborLines.map((line, idx) => (
-                                    <Row key={line.id || idx} gutter={8} className="mb-2">
-                                        <Col span={7}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
-                                        <Col span={6}><div style={{ paddingTop: 6 }}>{line.expertise || '-'}</div></Col>
-                                        <Col span={6}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
-                                        <Col span={2}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
-                                        <Col span={3}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                {laborLines.map((line, idx) => (
+                                    <Row key={line.id} gutter={8} className="mb-2">
+                                        <Col span={7}>
+                                            <Select
+                                                showSearch
+                                                placeholder={loadingEmployees ? 'Đang tải...' : 'Chọn nhân viên'}
+                                                value={line.employeeId || undefined}
+                                                onChange={(val, opt: any) => {
+                                                    const expertise = ((opt?.expertise as string) || '').toString().trim();
+                                                    updateLaborLine(idx, {
+                                                        employeeId: val,
+                                                        employeeName: (opt?.label as string) || '',
+                                                        expertise,
+                                                    });
+                                                }}
+                                                options={(function () {
+                                                    const selected = new Set(laborLines.map(l => l.employeeId).filter(Boolean));
+                                                    return workshopEmployees.map(e => ({
+                                                        label: e.UserName || e.id,
+                                                        value: e.id,
+                                                        disabled: selected.has(e.id) && e.id !== line.employeeId,
+                                                        expertise: (e.Expertise || '').toString().trim(),
+                                                    }));
+                                                })()}
+                                                filterOption={(input, option) => {
+                                                    const label = (option?.label as string) || '';
+                                                    const expertise = (option as any)?.expertise || '';
+                                                    const haystack = `${label} ${expertise}`.toLowerCase();
+                                                    return haystack.includes(input.toLowerCase());
+                                                }}
+                                                loading={loadingEmployees}
+                                            />
+                                        </Col>
+                                        <Col span={6}>
+                                            <Input
+                                                placeholder="Chuyên môn"
+                                                value={line.expertise || ''}
+                                                disabled
+                                            />
+                                        </Col>
+                                        <Col span={6}>
+                                            <Form.Item
+                                                style={{ marginBottom: 0 }}
+                                                validateStatus={submitAttempted && !String(line.description || '').trim() ? 'error' : ''}
+                                                help={submitAttempted && !String(line.description || '').trim() ? 'Bắt buộc nhập công việc' : undefined}
+                                            >
+                                                <Input
+                                                    placeholder="Công việc (VD: sơn, hàn...)"
+                                                    value={line.description}
+                                                    onChange={(e) => updateLaborLine(idx, { description: e.target.value })}
+                                                />
+                                            </Form.Item>
+                                        </Col>
+                                        <Col span={2}>
+                                            <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
+                                        </Col>
+                                        <Col span={2}>
+                                            <div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div>
+                                        </Col>
+                                        <Col span={1}>
+                                            <Button danger size="small" onClick={() => removeLaborLine(idx)}>Xóa</Button>
+                                        </Col>
                                     </Row>
                                 ))}
-                                <div className="text-right font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
+                                <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
-                            <div className="text-right font-semibold mt-2">Tổng chi phí: {(savedMaterialsCost + savedLaborCost).toLocaleString('vi-VN')} đ</div>
-                        </div>
-                    )}
-                    
-                    {/* Customer adjustment request is now loaded into the proposal textarea inside the modal (if present) */}
+                            <div className="text-right font-semibold mt-3">Tổng chi phí: {(materialsCost + laborCost).toLocaleString('vi-VN')} đ</div>
 
-                    {/* Show a button that opens the modal containing the full proposal + materials form */}
-                    {orderData.Status !== 'Đã đề xuất phương án' && (
-                        <div className="mb-4">
-                            <Button
-                                type="primary"
-                                size="large"
-                                onClick={() => {
-                                    // If customer requested a re-proposal, show their request above the textarea (read-only)
-                                        if (orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && orderData.CustomerAdjustmentRequest.text) {
-                                            const reqText = orderData.CustomerAdjustmentRequest.text;
-                                            // keep customer's request separate from the editable proposal so the inspector edits the proposal itself
-                                            setCustomerRequest(reqText);
-                                            try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
-                                        } else {
-                                            setCustomerRequest('');
-                                            try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
-                                        }
-                                    // Khởi tạo bản nháp từ dữ liệu đã lưu để đảm bảo đóng modal không làm thay đổi bản lưu
-                                    try {
-                                        setMaterialLines(savedMaterialLines.map(l => ({ ...l })));
-                                        setLaborLines(savedLaborLines.map(l => ({
-                                            ...l,
-                                            expertise: (l?.expertise || '').toString().trim(),
-                                        })));
-                                    } catch {}
-                                    setSubmitAttempted(false);
-                                    setModalVisible(true);
-                                }}
-                            >
-                                Đề xuất
-                            </Button>
-                        </div>
-                    )}
-
-                    <Modal
-                        title="Gửi đề xuất phương án sửa chữa"
-                        visible={modalVisible}
-                        onCancel={() => setModalVisible(false)}
-                        footer={null}
-                        destroyOnClose
-                        width={1100}
-                        bodyStyle={{ maxHeight: '70vh', overflowY: 'auto' }}
-                    >
-                        <Form
-                            form={form}
-                            layout="vertical"
-                            onFinish={async (vals) => {
-                                // đảm bảo state proposal đồng bộ với Form
-                                const text = (vals.proposal || '').toString();
-                                setProposal(text);
-                                await handleSubmitProposal(vals);
-                            }}
-                        >
-                            {/* If customer requested a re-proposal, show their request here (read-only, non-editable) */}
-                            {customerRequest && (
-                                // Show the card header and display the customer's request inside the card body (read-only)
-                                <Card size="small" title="Yêu cầu đề xuất của khách hàng" className="mb-4">
-                                    <div style={{ whiteSpace: 'pre-wrap', color: 'rgba(0,0,0,0.85)' }}>{customerRequest}</div>
-                                </Card>
-                            )}
-
-                            <Form.Item
-                                label="Phương án đề xuất"
-                                name="proposal"
-                                rules={[{ required: true, message: 'Vui lòng nhập phương án đề xuất!' }]}
-                            >
-                                <Input.TextArea
-                                    rows={6}
-                                    placeholder="Mô tả phương án sửa chữa cụ thể: thay thế, hàn, gia công, làm mới, vật tư cần thiết, thời gian dự kiến..."
-                                />
-                            </Form.Item>
-
-                            <Form.Item>
-                                <Card size="small" title="Vật liệu đề xuất" className="mb-4">
-                                    <div className="mb-2">
-                                        <Button type="dashed" onClick={addMaterialLine}>+ Thêm vật liệu</Button>
-                                    </div>
-                                    {materialLines.map((line, idx) => (
-                                        <Row key={line.id} gutter={8} className="mb-2">
-                                            <Col span={12}>
-                                                <Select
-                                                    showSearch
-                                                    placeholder="Chọn vật liệu"
-                                                    value={line.materialId}
-                                                    onChange={(val) => {
-                                                        const m = materialsCatalog.find(x => x.id === val) || { Name: '', Unit: '', Price: 0 };
-                                                        updateMaterialLine(idx, { materialId: val, name: m.Name || m.name || '', unit: m.Unit || m.unit || '', unitPrice: m.Price || m.price || 0 });
-                                                    }}
-                                                    options={materialsCatalog.map(m => ({ label: m.Name || m.name, value: m.id }))}
-                                                />
-                                            </Col>
-                                            <Col span={6}>
-                                                <InputNumber min={1} style={{ width: '100%' }} value={line.qty} onChange={(v) => updateMaterialLine(idx, { qty: Math.max(1, Number(v) || 1) })} />
-                                            </Col>
-                                            <Col span={4}>
-                                                <div style={{ paddingTop: 6 }}>{(Number(line.lineTotal) || 0).toLocaleString('vi-VN')} đ</div>
-                                            </Col>
-                                            <Col span={2}>
-                                                <Button danger size="small" onClick={() => removeMaterialLine(idx)}>Xóa</Button>
-                                            </Col>
-                                        </Row>
-                                    ))}
-                                    <div className="text-right font-medium">Chi phí vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
-                                </Card>
-                                
-                                <Card size="small" title="Nhân công đề xuất" className="mb-4">
-                                    <div className="mb-2">
-                                        <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
-                                    </div>
-                                    <Row gutter={8} className="mb-2 font-medium">
-                                        <Col span={7}><div>Nhân viên</div></Col>
-                                        <Col span={6}><div>Chuyên môn</div></Col>
-                                        <Col span={6}><div>Công việc</div></Col>
-                                        <Col span={2}><div>Số ngày</div></Col>
-                                        <Col span={2}><div>Chi phí</div></Col>
-                                        <Col span={1}></Col>
-                                    </Row>
-                                    {laborLines.map((line, idx) => (
-                                        <Row key={line.id} gutter={8} className="mb-2">
-                                            <Col span={7}>
-                                                <Select
-                                                    showSearch
-                                                    placeholder={loadingEmployees ? 'Đang tải...' : 'Chọn nhân viên'}
-                                                    value={line.employeeId || undefined}
-                                                    onChange={(val, opt: any) => {
-                                                        const expertise = ((opt?.expertise as string) || '').toString().trim();
-                                                        updateLaborLine(idx, {
-                                                            employeeId: val,
-                                                            employeeName: (opt?.label as string) || '',
-                                                            expertise,
-                                                        });
-                                                    }}
-                                                    options={(function(){
-                                                        const selected = new Set(laborLines.map(l => l.employeeId).filter(Boolean));
-                                                        return workshopEmployees.map(e => ({
-                                                            label: e.UserName || e.id,
-                                                            value: e.id,
-                                                            disabled: selected.has(e.id) && e.id !== line.employeeId,
-                                                            expertise: (e.Expertise || '').toString().trim(),
-                                                        }));
-                                                    })()}
-                                                    filterOption={(input, option) => {
-                                                        const label = (option?.label as string) || '';
-                                                        const expertise = (option as any)?.expertise || '';
-                                                        const haystack = `${label} ${expertise}`.toLowerCase();
-                                                        return haystack.includes(input.toLowerCase());
-                                                    }}
-                                                    loading={loadingEmployees}
-                                                />
-                                            </Col>
-                                            <Col span={6}>
-                                                <Input
-                                                    placeholder="Chuyên môn"
-                                                    value={line.expertise || ''}
-                                                    disabled
-                                                />
-                                            </Col>
-                                            <Col span={6}>
-                                                <Form.Item
-                                                    style={{ marginBottom: 0 }}
-                                                    validateStatus={submitAttempted && !String(line.description || '').trim() ? 'error' : ''}
-                                                    help={submitAttempted && !String(line.description || '').trim() ? 'Bắt buộc nhập công việc' : undefined}
-                                                >
-                                                    <Input
-                                                        placeholder="Công việc (VD: sơn, hàn...)"
-                                                        value={line.description}
-                                                        onChange={(e) => updateLaborLine(idx, { description: e.target.value })}
-                                                    />
-                                                </Form.Item>
-                                            </Col>
-                                            <Col span={2}>
-                                                <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
-                                            </Col>
-                                            <Col span={2}>
-                                                <div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div>
-                                            </Col>
-                                            <Col span={1}>
-                                                <Button danger size="small" onClick={() => removeLaborLine(idx)}>Xóa</Button>
-                                            </Col>
-                                        </Row>
-                                    ))}
-                                    <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
-                                </Card>
-                                <div className="text-right font-semibold mt-3">Tổng chi phí: {(materialsCost + laborCost).toLocaleString('vi-VN')} đ</div>
-                                
-                                <div style={{ textAlign: 'right', marginTop: 20 }}>
-                                    <Button style={{ marginRight: 8 }} onClick={() => { setSubmitAttempted(false); setModalVisible(false); }}>Hủy</Button>
-                                    <Button type="primary" onClick={() => { setSubmitAttempted(true); form.submit(); }} loading={proposalLoading}>Gửi đề xuất phương án</Button>
-                                </div>
-                            </Form.Item>
-                        </Form>
-                    </Modal>
-                </div>
+                            <div style={{ textAlign: 'right', marginTop: 20 }}>
+                                <Button style={{ marginRight: 8 }} onClick={() => { setSubmitAttempted(false); setModalVisible(false); }}>Hủy</Button>
+                                <Button type="primary" onClick={() => { setSubmitAttempted(true); form.submit(); }} loading={proposalLoading}>Gửi đề xuất phương án</Button>
+                            </div>
+                        </Form.Item>
+                    </Form>
+                </Modal>
+            </div>
         </InspectorLayout>
     );
 };

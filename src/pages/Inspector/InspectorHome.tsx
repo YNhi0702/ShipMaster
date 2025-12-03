@@ -37,24 +37,24 @@ const InspectorHome: React.FC = () => {
         try {
             setRefreshing(true);
             const ordersRef = collection(db, 'repairOrder');
-            
+
             // Lấy tất cả đơn hàng để xử lý dấu cách thừa trong status
             const allOrdersSnapshot = await getDocs(ordersRef);
-            
+
             // Đơn chờ tiếp nhận - filter để xử lý dấu cách thừa
             const waitingOrders = allOrdersSnapshot.docs.filter(doc => {
                 const status = doc.data().Status;
                 return status && status.trim() === 'Chờ giám định';
             });
-            
+
             const ordersData = await Promise.all(waitingOrders.map(async (docSnap) => {
                 const order = docSnap.data();
                 const createdAt = order.StartDate?.toDate ? order.StartDate.toDate().toLocaleDateString('vi-VN') : '';
-                
+
                 // Lấy tên tàu và xưởng
                 let shipName = 'Không xác định';
                 let workshopName = 'Không xác định';
-                
+
                 try {
                     if (order.shipId) {
                         const shipDoc = await getDoc(doc(db, 'ship', order.shipId));
@@ -67,7 +67,7 @@ const InspectorHome: React.FC = () => {
                 } catch (error) {
                     console.error('Error fetching ship/workshop names:', error);
                 }
-                
+
                 return {
                     id: docSnap.id,
                     ...order,
@@ -86,15 +86,15 @@ const InspectorHome: React.FC = () => {
                 const status = order.Status;
                 return status && targetStatuses.includes(status.trim()) && order.inspectorId === uid;
             });
-            
+
             const proposalData = await Promise.all(proposalOrders.map(async (docSnap) => {
                 const order = docSnap.data();
                 const createdAt = order.StartDate?.toDate ? order.StartDate.toDate().toLocaleDateString('vi-VN') : '';
-                
+
                 // Lấy tên tàu và xưởng
                 let shipName = 'Không xác định';
                 let workshopName = 'Không xác định';
-                
+
                 try {
                     if (order.shipId) {
                         const shipDoc = await getDoc(doc(db, 'ship', order.shipId));
@@ -107,7 +107,7 @@ const InspectorHome: React.FC = () => {
                 } catch (error) {
                     console.error('Error fetching ship/workshop names:', error);
                 }
-                
+
                 return {
                     id: docSnap.id,
                     ...order,
@@ -161,7 +161,7 @@ const InspectorHome: React.FC = () => {
         }
     };
 
-    
+
 
     // Xử lý URL parameters để set tab đúng
     useEffect(() => {
@@ -182,12 +182,15 @@ const InspectorHome: React.FC = () => {
 
             try {
                 // Lấy thông tin giám định viên
-                const employeesRef = collection(db, 'employees');
-                const empQuery = query(employeesRef, where('__name__', '==', uid));
-                const empSnapshot = await getDocs(empQuery);
-                if (!empSnapshot.empty) {
-                    setUserName(empSnapshot.docs[0].data().UserName || 'Giám định viên');
+                const usersRef = collection(db, 'users');
+                const userQuery = query(usersRef, where('__name__', '==', uid));
+                const userSnapshot = await getDocs(userQuery);
+
+                if (!userSnapshot.empty) {
+                    const u = userSnapshot.docs[0].data();
+                    setUserName(u.fullName || u.username || 'Không có tên');
                 }
+
 
                 // Fetch orders data
                 await fetchOrdersData();
@@ -253,7 +256,7 @@ const InspectorHome: React.FC = () => {
         },
     ];
 
-    
+
 
     // Cột cho tab Đề xuất phương án
     const columnsProposal = [
@@ -336,7 +339,7 @@ const InspectorHome: React.FC = () => {
                 <Button
                     type="default"
                     className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
-                        onClick={() => navigate(`/inspector/done/${record.id}`)}
+                    onClick={() => navigate(`/inspector/done/${record.id}`)}
                 >
                     Xem
                 </Button>
@@ -356,54 +359,54 @@ const InspectorHome: React.FC = () => {
             userName={userName}
             loadingUser={loadingUser}
         >
-                <div className="m-0 p-0">
-                    {selectedKey === 'orders' && (
-                        <>
-                            <Title level={4}>Danh sách đơn hàng chờ tiếp nhận</Title>
-                            <div className="w-full overflow-x-auto">
-                                <Table
-                                    columns={columnsAccept}
-                                    dataSource={orders}
-                                    rowKey="id"
-                                    loading={loadingOrders || refreshing}
-                                    bordered
-                                    className="shadow-sm"
-                                />
-                            </div>
-                        </>
-                    )}
-                    {selectedKey === 'proposal' && (
-                        <>
-                            <Title level={4}>Danh sách đơn chờ đề xuất phương án</Title>
-                            <div className="w-full overflow-x-auto">
-                                <Table
-                                    columns={columnsProposal}
-                                    dataSource={proposalOrders}
-                                    rowKey="id"
-                                    loading={loadingOrders || refreshing}
-                                    bordered
-                                    className="shadow-sm"
-                                />
-                            </div>
-                        </>
-                    )}
+            <div className="m-0 p-0">
+                {selectedKey === 'orders' && (
+                    <>
+                        <Title level={4}>Danh sách đơn hàng chờ tiếp nhận</Title>
+                        <div className="w-full overflow-x-auto">
+                            <Table
+                                columns={columnsAccept}
+                                dataSource={orders}
+                                rowKey="id"
+                                loading={loadingOrders || refreshing}
+                                bordered
+                                className="shadow-sm"
+                            />
+                        </div>
+                    </>
+                )}
+                {selectedKey === 'proposal' && (
+                    <>
+                        <Title level={4}>Danh sách đơn chờ đề xuất phương án</Title>
+                        <div className="w-full overflow-x-auto">
+                            <Table
+                                columns={columnsProposal}
+                                dataSource={proposalOrders}
+                                rowKey="id"
+                                loading={loadingOrders || refreshing}
+                                bordered
+                                className="shadow-sm"
+                            />
+                        </div>
+                    </>
+                )}
 
-                    {selectedKey === 'inspected' && (
-                        <>
-                            <Title level={4}>Danh sách đơn đã giám định</Title>
-                            <div className="w-full overflow-x-auto">
-                                <Table
-                                    columns={columnsInspected}
-                                    dataSource={inspectedOrders}
-                                    rowKey="id"
-                                    loading={loadingOrders || refreshing}
-                                    bordered
-                                    className="shadow-sm"
-                                />
-                            </div>
-                        </>
-                    )}
-                </div>
+                {selectedKey === 'inspected' && (
+                    <>
+                        <Title level={4}>Danh sách đơn đã giám định</Title>
+                        <div className="w-full overflow-x-auto">
+                            <Table
+                                columns={columnsInspected}
+                                dataSource={inspectedOrders}
+                                rowKey="id"
+                                loading={loadingOrders || refreshing}
+                                bordered
+                                className="shadow-sm"
+                            />
+                        </div>
+                    </>
+                )}
+            </div>
         </InspectorLayout>
     );
 };
