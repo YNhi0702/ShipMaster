@@ -58,12 +58,11 @@ const ProposalInspector: React.FC = () => {
 
             try {
                 // Lấy thông tin giám định viên
-                const employeesRef = collection(db, 'employees');
-                const empQuery = query(employeesRef, where('__name__', '==', uid));
-                const empSnapshot = await getDocs(empQuery);
-                if (!empSnapshot.empty) {
-                    setUserName(empSnapshot.docs[0].data().UserName || 'Giám định viên');
+                const userSnap = await getDoc(doc(db, "users", uid));
+                if (userSnap.exists()) {
+                    setUserName(userSnap.data().fullName || userSnap.data().username || "Giám định viên");
                 }
+
                 setLoadingUser(false);
 
                 // Lấy thông tin đơn hàng
@@ -220,7 +219,7 @@ const ProposalInspector: React.FC = () => {
                 const [shipSnap, workshopSnap, employeeSnap] = await Promise.all([
                     getDoc(doc(db, 'ship', orderData.shipId)),
                     getDoc(doc(db, 'workShop', orderData.workshopId)),
-                    getDoc(doc(db, 'employees', orderData.inspectorId)),
+                    getDoc(doc(db, 'users', orderData.inspectorId)),
                 ]);
                 if (shipSnap.exists()) {
                     const s = shipSnap.data();

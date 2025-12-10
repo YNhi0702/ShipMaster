@@ -423,6 +423,7 @@ const AccountHome: React.FC = () => {
                 Customer_ID: selectedOrder.customerId || null,
                 OrderCode: selectedOrder.orderCode || null,
                 TotalAmount: grandTotal,
+                RemainingAmount:grandTotal,
                 PaymentMethod: 'Chưa xác định',
                 PaymentStatus: 'Chưa thanh toán',
                 CreatedDate: serverTimestamp(),

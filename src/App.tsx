@@ -3,7 +3,6 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 
 import PrivateRoute from './routes/PrivateRoute';
-
 import AuthenComponent from "./pages/Auth/AuthenComponent";
 
 // CUSTOMER
@@ -26,6 +25,7 @@ import AccountLayout from "./components/Account/AccountLayout";
 import AccountHome from "./pages/Account/AccountHome";
 import PaymentList from "./pages/Account/PaymentList";
 import InventoryManagement from "./pages/Account/InventoryManagement";
+import StatisticsPage from "./pages/Account/StatisticsPage";
 
 const App: React.FC = () => {
   return (
@@ -35,7 +35,7 @@ const App: React.FC = () => {
         {/* LOGIN */}
         <Route path="/login" element={<AuthenComponent />} />
 
-        {/* CUSTOMER HOME */}
+        {/* ============ CUSTOMER ============ */}
         <Route
           path="/"
           element={
@@ -45,7 +45,6 @@ const App: React.FC = () => {
           }
         />
 
-        {/* CUSTOMER - ORDER DETAIL */}
         <Route
           path="/orders/:id"
           element={
@@ -55,39 +54,8 @@ const App: React.FC = () => {
           }
         />
 
-        {/* INSPECTOR - ORDER DETAIL */}
         <Route
-          path="/inspector/orders/:id"
-          element={
-            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-              <OrderDetailInspector />
-            </PrivateRoute>
-          }
-        />
-
-        {/* INSPECTOR - DONE DETAIL */}
-        <Route
-          path="/inspector/done/:id"
-          element={
-            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-              <OrderDetailDone />
-            </PrivateRoute>
-          }
-        />
-
-        {/* INSPECTOR - PROPOSAL */}
-        <Route
-          path="/inspector/proposal/:id"
-          element={
-            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
-              <ProposalInspector />
-            </PrivateRoute>
-          }
-        />
-
-        {/* CUSTOMER - CREATE ORDER */}
-        <Route
-          path="/createRepairOder"
+          path="/createRepairOrder"
           element={
             <PrivateRoute allowedRoles={['customer']}>
               <CreateOrder />
@@ -95,7 +63,7 @@ const App: React.FC = () => {
           }
         />
 
-        {/* INSPECTOR HOME */}
+        {/* ============ INSPECTOR ============ */}
         <Route
           path="/inspector"
           element={
@@ -105,27 +73,53 @@ const App: React.FC = () => {
           }
         />
 
-        {/* WORKSHOP HOME */}
+        <Route
+          path="/inspector/orders/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <OrderDetailInspector />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/inspector/done/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <OrderDetailDone />
+            </PrivateRoute>
+          }
+        />
+
+        <Route
+          path="/inspector/proposal/:id"
+          element={
+            <PrivateRoute allowedRoles={['inspector', 'officer', '1']}>
+              <ProposalInspector />
+            </PrivateRoute>
+          }
+        />
+
+        {/* ============ WORKSHOP ============ */}
         <Route
           path="/workshop"
           element={
-            <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+            <PrivateRoute allowedRoles={['workshop', 'workshop_owner', '2', 'owner']}>
               <WorkshopHome />
             </PrivateRoute>
           }
         />
 
-        {/* WORKSHOP ORDER DETAIL */}
         <Route
           path="/workshop/orders/:id"
           element={
-            <PrivateRoute allowedRoles={['workshop', '2', 'workshop_owner', 'owner']}>
+            <PrivateRoute allowedRoles={['workshop', 'workshop_owner', '2', 'owner']}>
               <OrderInfo />
             </PrivateRoute>
           }
         />
 
-        {/* ACCOUNTANT */}
+        {/* ============ ACCOUNTANT ============ */}
         <Route
           path="/account"
           element={
@@ -137,6 +131,7 @@ const App: React.FC = () => {
           <Route index element={<AccountHome />} />
           <Route path="payment" element={<PaymentList />} />
           <Route path="inventory" element={<InventoryManagement />} />
+          <Route path="statistics" element={<StatisticsPage />} />   {/* 👈 ĐÃ THÊM ROUTE NÀY */}
         </Route>
 
       </Routes>

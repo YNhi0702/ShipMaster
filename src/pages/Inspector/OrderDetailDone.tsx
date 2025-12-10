@@ -205,11 +205,9 @@ const OrderDetailDone: React.FC = () => {
             </div>
 
             <Descriptions title="Thông tin đơn" bordered column={1}>
-                <Descriptions.Item label="Mã đơn">{id}</Descriptions.Item>
                 <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
                 <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
                 <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
-                <Descriptions.Item label="Cán bộ giám định">{orderData.assignedInspector || employeeName || 'Chưa được gán'}</Descriptions.Item>
                 <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
                 {orderData.description && <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>}
 
