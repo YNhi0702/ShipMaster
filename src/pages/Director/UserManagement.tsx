@@ -278,7 +278,7 @@ const UserManagement: React.FC = () => {
     return (
         <div>
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Quản lý người dùng</h2>
+                <h2 className="text-xl font-bold">Danh sách người dùng</h2>
                 <Button 
                     type="primary" 
                     icon={<PlusOutlined />} 
