@@ -38,7 +38,7 @@ const AccountLayout: React.FC<AccountLayoutProps> = ({ children }) => {
                 const snap = await getDoc(doc(db, 'users', uid));
                 if (snap.exists()) {
                     const data = snap.data() as Record<string, any>;
-                    const resolvedName = data?.UserName || data?.fullName || data?.name || data?.displayName || 'Kế toán';
+                    const resolvedName = data?.UserName || data?.fullName || data?.username || data?.name || data?.displayName || 'Kế toán';
                     setUserName(resolvedName);
                     sessionStorage.setItem('accountantName', resolvedName);
                     localStorage.setItem('accountantName', resolvedName);

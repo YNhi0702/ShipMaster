@@ -55,6 +55,9 @@ const Login: React.FC = () => {
                 case "accountant":
                     navigate("/account"); 
                     break;
+                case "director":
+                    navigate("/director");
+                    break;
                 default:
                     message.error("Role không hợp lệ!");
             }

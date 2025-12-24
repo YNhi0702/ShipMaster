@@ -146,7 +146,7 @@ const WorkshopHome: React.FC = () => {
                     const userSnap = await getDoc(userRef);
                     if (userSnap.exists()) {
                         const u = userSnap.data();
-                        resolvedName = u?.UserName || u?.fullName || u?.name || u?.displayName || null;
+                        resolvedName = u?.UserName || u?.fullName || u?.username || u?.name || u?.displayName || null;
                     }
                 }
 

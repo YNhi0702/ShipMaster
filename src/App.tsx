@@ -27,6 +27,11 @@ import PaymentList from "./pages/Account/PaymentList";
 import InventoryManagement from "./pages/Account/InventoryManagement";
 import StatisticsPage from "./pages/Account/StatisticsPage";
 
+// DIRECTOR
+import DirectorLayout from "./components/Director/DirectorLayout";
+import UserManagement from "./pages/Director/UserManagement";
+import WorkshopManagement from "./pages/Director/WorkshopManagement";
+
 const App: React.FC = () => {
   return (
     <Router>
@@ -132,6 +137,20 @@ const App: React.FC = () => {
           <Route path="payment" element={<PaymentList />} />
           <Route path="inventory" element={<InventoryManagement />} />
           <Route path="statistics" element={<StatisticsPage />} />   {/* 👈 ĐÃ THÊM ROUTE NÀY */}
+        </Route>
+
+        {/* ============ DIRECTOR ============ */}
+        <Route
+          path="/director"
+          element={
+            <PrivateRoute allowedRoles={['director']}>
+              <DirectorLayout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<UserManagement />} />
+          <Route path="users" element={<UserManagement />} />
+          <Route path="workshops" element={<WorkshopManagement />} />
         </Route>
 
       </Routes>

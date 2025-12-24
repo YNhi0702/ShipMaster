@@ -12,7 +12,7 @@ const AuthenComponent: React.FC = () => {
             className="min-h-screen flex items-center justify-center bg-cover bg-center relative"
             style={{
                 backgroundImage:
-                    'url(https://reddragoncons.com/storage/2020/10/cong-ty-sua-chua-tau-bien.jpg)',
+                    'url(https://images.unsplash.com/photo-1569263979104-865ab7cd8d13?q=80&w=2000&auto=format&fit=crop)',
             }}
         >
             <div className="absolute inset-0 bg-black opacity-60"></div>

@@ -286,7 +286,7 @@ const PaymentList: React.FC = () => {
                 orders={filteredOrders}
                 loading={loading}
                 onPay={handlePay}
-                onShowHistory={(order: PaymentRow) => {
+                onShowHistory={(order) => {
                     setSelectedOrder(order);
                     setHistoryVisible(true);
                 }}

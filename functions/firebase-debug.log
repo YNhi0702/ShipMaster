@@ -1,0 +1,116 @@
+[debug] [2025-12-17T03:09:07.438Z] ----------------------------------------------------------------------
+[debug] [2025-12-17T03:09:07.439Z] Command:       /Users/macbook/.nvm/versions/node/v18.20.8/bin/node /Users/macbook/.nvm/versions/node/v18.20.8/bin/firebase deploy --only functions
+[debug] [2025-12-17T03:09:07.440Z] CLI Version:   13.35.1
+[debug] [2025-12-17T03:09:07.440Z] Platform:      darwin
+[debug] [2025-12-17T03:09:07.440Z] Node Version:  v18.20.8
+[debug] [2025-12-17T03:09:07.440Z] Time:          Wed Dec 17 2025 10:09:07 GMT+0700 (Indochina Time)
+[debug] [2025-12-17T03:09:07.440Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2025-12-17T03:09:07.509Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2025-12-17T03:09:07.510Z] > authorizing via signed-in user (nhiybui070204@gmail.com)
+[debug] [2025-12-17T03:09:07.510Z] [iam] checking project shipmaster-fb2eb for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2025-12-17T03:09:07.510Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:07.510Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:07.511Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb:testIamPermissions [none]
+[debug] [2025-12-17T03:09:07.511Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb:testIamPermissions x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:07.511Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-12-17T03:09:08.556Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb:testIamPermissions 200
+[debug] [2025-12-17T03:09:08.556Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2025-12-17T03:09:08.557Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:08.557Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:08.557Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/shipmaster-fb2eb/serviceAccounts/shipmaster-fb2eb@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2025-12-17T03:09:08.557Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/shipmaster-fb2eb/serviceAccounts/shipmaster-fb2eb@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2025-12-17T03:09:09.759Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/shipmaster-fb2eb/serviceAccounts/shipmaster-fb2eb@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2025-12-17T03:09:09.760Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/shipmaster-fb2eb/serviceAccounts/shipmaster-fb2eb@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'shipmaster-fb2eb'...
+[info] 
+[info] i  deploying functions 
+[debug] [2025-12-17T03:09:09.762Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:09.763Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:09.763Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb [none]
+[debug] [2025-12-17T03:09:10.930Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb 200
+[debug] [2025-12-17T03:09:10.930Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/shipmaster-fb2eb {"projectNumber":"281630004223","projectId":"shipmaster-fb2eb","lifecycleState":"ACTIVE","name":"shipMaster","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-05-28T15:18:16.383082Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.932Z] Checked if tokens are valid: true, expires at: 1765943904962
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2025-12-17T03:09:10.933Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.933Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:10.933Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudfunctions.googleapis.com [none]
+[debug] [2025-12-17T03:09:10.933Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:10.935Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/runtimeconfig.googleapis.com [none]
+[debug] [2025-12-17T03:09:10.935Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/runtimeconfig.googleapis.com x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:10.936Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudbuild.googleapis.com [none]
+[debug] [2025-12-17T03:09:10.936Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudbuild.googleapis.com x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:10.938Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/artifactregistry.googleapis.com [none]
+[debug] [2025-12-17T03:09:10.938Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/artifactregistry.googleapis.com x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:12.287Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/runtimeconfig.googleapis.com 200
+[debug] [2025-12-17T03:09:12.288Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/runtimeconfig.googleapis.com [omitted]
+[debug] [2025-12-17T03:09:12.290Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudfunctions.googleapis.com 200
+[debug] [2025-12-17T03:09:12.290Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudfunctions.googleapis.com [omitted]
+[info] ✔  functions: required API cloudfunctions.googleapis.com is enabled 
+[debug] [2025-12-17T03:09:12.291Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudbuild.googleapis.com 200
+[debug] [2025-12-17T03:09:12.291Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/cloudbuild.googleapis.com [omitted]
+[info] ✔  functions: required API cloudbuild.googleapis.com is enabled 
+[debug] [2025-12-17T03:09:12.292Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/artifactregistry.googleapis.com 200
+[debug] [2025-12-17T03:09:12.293Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/artifactregistry.googleapis.com [omitted]
+[info] ✔  artifactregistry: required API artifactregistry.googleapis.com is enabled 
+[debug] [2025-12-17T03:09:12.293Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:12.293Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:12.293Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/shipmaster-fb2eb/adminSdkConfig [none]
+[debug] [2025-12-17T03:09:13.028Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/shipmaster-fb2eb/adminSdkConfig 200
+[debug] [2025-12-17T03:09:13.028Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/shipmaster-fb2eb/adminSdkConfig {"projectId":"shipmaster-fb2eb","storageBucket":"shipmaster-fb2eb.firebasestorage.app"}
+[debug] [2025-12-17T03:09:13.028Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:13.028Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:13.028Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/shipmaster-fb2eb/configs [none]
+[debug] [2025-12-17T03:09:13.526Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/shipmaster-fb2eb/configs 200
+[debug] [2025-12-17T03:09:13.526Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/shipmaster-fb2eb/configs {}
+[debug] [2025-12-17T03:09:13.528Z] Validating nodejs source
+[debug] [2025-12-17T03:09:13.859Z] > [functions] package.json contents: {
+  "name": "functions",
+  "description": "Cloud Functions for ShipMaster",
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
+    "start": "npm run shell",
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
+  },
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^11.8.0",
+    "firebase-functions": "^7.0.2"
+  },
+  "private": true
+}
+[debug] [2025-12-17T03:09:13.859Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2025-12-17T03:09:13.859Z] Could not find functions.yaml. Must use http discovery
+[debug] [2025-12-17T03:09:13.863Z] Found firebase-functions binary at '/Users/macbook/Documents/GitHub/ShipMaster/functions/node_modules/.bin/firebase-functions'
+[info] Serving at port 8537
+
+[debug] [2025-12-17T03:09:14.390Z] Got response from /__/functions.yaml {"endpoints":{"changeUserPassword":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"changeUserPassword"},"deleteUserAuth":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"callableTrigger":{},"entryPoint":"deleteUserAuth"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[info] i  extensions: ensuring required API firebaseextensions.googleapis.com is enabled... 
+[debug] [2025-12-17T03:09:14.400Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:14.400Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:14.400Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com [none]
+[debug] [2025-12-17T03:09:14.400Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:15.744Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com 200
+[debug] [2025-12-17T03:09:15.744Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com [omitted]
+[warn] ⚠  extensions: missing required API firebaseextensions.googleapis.com. Enabling now... 
+[debug] [2025-12-17T03:09:15.744Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:15.744Z] Checked if tokens are valid: true, expires at: 1765943904962
+[debug] [2025-12-17T03:09:15.745Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com:enable [none]
+[debug] [2025-12-17T03:09:15.745Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com:enable x-goog-quota-user=projects/shipmaster-fb2eb
+[debug] [2025-12-17T03:09:17.180Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com:enable 200
+[debug] [2025-12-17T03:09:17.180Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/shipmaster-fb2eb/services/firebaseextensions.googleapis.com:enable [omitted]
