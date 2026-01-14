@@ -21,3 +21,28 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+# dependencies
+node_modules/
+functions/node_modules/
+
+# build
+build/
+dist/
+functions/lib/
+
+# firebase
+.firebase/
+.runtimeconfig.json
+
+# cache
+.cache/
+*.map
+
+# IDE
+.idea/
+.vscode/
+
+# env
+.env
+.env.*
+
