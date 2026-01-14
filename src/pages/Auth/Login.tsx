@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginFormValues {
@@ -13,6 +13,7 @@ interface LoginFormValues {
 const Login: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+    const [messageApi, contextHolder] = message.useMessage();
 
     const onFinish = async (values: LoginFormValues) => {
         try {
@@ -28,7 +29,7 @@ const Login: React.FC = () => {
             const userDoc = await getDoc(doc(db, 'users', user.uid));
 
             if (!userDoc.exists()) {
-                message.error("Tài khoản chưa được cấu hình trong hệ thống!");
+                messageApi.error("Tài khoản chưa được cấu hình trong hệ thống!");
                 setLoading(false);
                 return;
             }
@@ -39,7 +40,7 @@ const Login: React.FC = () => {
             // Lưu role vào session
             sessionStorage.setItem("role", role);
 
-            message.success("Đăng nhập thành công!");
+            messageApi.success("Đăng nhập thành công!");
 
             // Điều hướng theo role
             switch (role) {
@@ -59,11 +60,16 @@ const Login: React.FC = () => {
                     navigate("/director");
                     break;
                 default:
-                    message.error("Role không hợp lệ!");
+                    messageApi.error("Role không hợp lệ!");
             }
 
         } catch (error: any) {
-            message.error("Đăng nhập thất bại: " + error.message);
+            console.error("Login error:", error.code);
+            if (error.code === 'auth/invalid-email') {
+                messageApi.error("Email sai định dạng!");
+            } else {
+                messageApi.error("Email hoặc mật khẩu không chính xác!");
+            }
         } finally {
             setLoading(false);
         }
@@ -71,6 +77,7 @@ const Login: React.FC = () => {
 
     return (
         <div className="container-login">
+            {contextHolder}
             <div className="card">
                 <Form name="login" layout="vertical" onFinish={onFinish} style={{ maxWidth: 400, margin: "auto", marginTop: "10%" }}>
                     <Form.Item label="Email" name="email" rules={[{ required: true, message: "Vui lòng nhập email!" }]}>

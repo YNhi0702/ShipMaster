@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
 interface RegisterFormValues {
@@ -9,15 +9,24 @@ interface RegisterFormValues {
     password: string;
     fullName: string;
     phone: string;
-    address: string;
 }
 
 const Register: React.FC = () => {
     const [loading, setLoading] = useState(false);
+    const [messageApi, contextHolder] = message.useMessage();
 
     const onFinish = async (values: RegisterFormValues) => {
         setLoading(true);
         try {
+            // Kiểm tra số điện thoại tồn tại
+            const q = query(collection(db, "users"), where("phone", "==", values.phone));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                messageApi.error("Số điện thoại đã tồn tại trong hệ thống!");
+                setLoading(false);
+                return;
+            }
+
             // Tạo user bằng email/password
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const user = userCredential.user;
@@ -27,9 +36,8 @@ const Register: React.FC = () => {
                 uid: user.uid,
                 email: values.email,
                 phone: values.phone,
-                username: values.email.split('@')[0],
+                fullName: values.fullName,
                 role: 'customer',
-                createdAt: new Date().toISOString(),
             });
 
             // Lưu dữ liệu chi tiết khách hàng vào collection customers
@@ -38,12 +46,19 @@ const Register: React.FC = () => {
                 fullName: values.fullName,
                 phone: values.phone,
                 email: values.email,
-                address: values.address,
             });
 
-            message.success('Đăng ký thành công!');
+            messageApi.success('Đăng ký thành công!');
         } catch (error: any) {
-            message.error(error.message);
+             if (error.code === 'auth/email-already-in-use') {
+                 messageApi.error("Email đã tồn tại trong hệ thống!");
+             } else if (error.code === 'auth/invalid-email') {
+                 messageApi.error("Email không hợp lệ!");
+             } else if (error.code === 'auth/weak-password') {
+                 messageApi.error("Mật khẩu quá yếu! Mật khẩu phải có ít nhất 6 ký tự.");
+             } else {
+                 messageApi.error("Đăng ký thất bại: " + error.message);
+             }
         } finally {
             setLoading(false);
         }
@@ -51,6 +66,7 @@ const Register: React.FC = () => {
 
     return (
         <div className="max-h-[60vh] overflow-y-auto">
+            {contextHolder}
             <Form
                 name="register"
                 layout="vertical"
@@ -68,14 +84,6 @@ const Register: React.FC = () => {
                     label="Số điện thoại"
                     name="phone"
                     rules={[{required: true, message: 'Vui lòng nhập số điện thoại!'}]}
-                >
-                    <Input/>
-                </Form.Item>
-
-                <Form.Item
-                    label="Địa chỉ"
-                    name="address"
-                    rules={[{required: true, message: 'Vui lòng nhập địa chỉ!'}]}
                 >
                     <Input/>
                 </Form.Item>

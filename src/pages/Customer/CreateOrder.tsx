@@ -31,6 +31,7 @@ const CreateOrder: React.FC = () => {
 
     useEffect(() => {
         const fetchData = async () => {
+            setLoading(true);
             const uid = sessionStorage.getItem('uid');
             if (!uid) {
                 navigate('/login');
@@ -38,10 +39,12 @@ const CreateOrder: React.FC = () => {
             }
 
             try {
+                // Lấy ships của user
                 const shipQuery = query(collection(db, 'ship'), where('uid', '==', uid));
                 const shipSnapshot = await getDocs(shipQuery);
                 const shipData = shipSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
+                // Lấy workshops
                 const workshopQuery = query(collection(db, 'workShop'), where('status', '==', 'còn trống'));
                 const workshopSnapshot = await getDocs(workshopQuery);
                 const workshopData = workshopSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -49,6 +52,7 @@ const CreateOrder: React.FC = () => {
                 setShips(shipData);
                 setWorkshops(workshopData);
             } catch (error) {
+                console.error("Error fetching data:", error);
                 message.error('Lỗi khi tải dữ liệu.');
             } finally {
                 setLoading(false);

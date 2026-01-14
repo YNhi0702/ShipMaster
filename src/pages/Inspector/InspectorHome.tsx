@@ -230,12 +230,6 @@ const InspectorHome: React.FC = () => {
             render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
         },
         {
-            title: 'Cán bộ giám định',
-            dataIndex: 'assignedInspector',
-            key: 'assignedInspector',
-            render: (inspector: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{inspector || 'Chưa được gán'}</div>,
-        },
-        {
             title: 'Mô tả',
             dataIndex: 'description',
             key: 'description',
@@ -295,12 +289,6 @@ const InspectorHome: React.FC = () => {
             dataIndex: 'workshopName',
             key: 'workshopName',
             render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div>
-        },
-        {
-            title: 'Cán bộ giám định',
-            dataIndex: 'assignedInspector',
-            key: 'assignedInspector',
-            render: (inspector: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{inspector || 'Chưa được gán'}</div>,
         },
         {
             title: 'Mô tả',

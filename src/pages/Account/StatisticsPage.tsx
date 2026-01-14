@@ -2,11 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { Card, Col, Row, Statistic, Typography, message, Spin } from 'antd';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../firebase';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import moment from 'moment';
+import 'moment/locale/vi';
 
 const { Title } = Typography;
 
 const StatisticsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
+    moment.locale('vi');
 
     const [statistics, setStatistics] = useState({
         totalInvoices: 0,
@@ -17,55 +21,43 @@ const StatisticsPage: React.FC = () => {
         totalDebt: 0,
     });
 
+    const [chartData, setChartData] = useState<any[]>([]);
+
     const fetchStatistics = async () => {
         try {
             setLoading(true);
 
             // =============================
-            // 1. LẤY DANH SÁCH HÓA ĐƠN
+            // 1. LẤY DANH SÁCH HÓA ĐƠN VÀ PAYMENT
             // =============================
             const invoiceSnap = await getDocs(collection(db, "invoice"));
             const invoices = invoiceSnap.docs.map(doc => doc.data());
 
-            // =============================
-            // 2. LẤY DANH SÁCH PAYMENT (ĐỂ TÍNH ĐÃ THU)
-            // =============================
             const paymentSnap = await getDocs(collection(db, "payment"));
             const payments = paymentSnap.docs.map(doc => doc.data());
 
             // =============================
-            // 3. TÍNH TỔNG DOANH THU ĐÃ THU (TOTALCOLLECTED)
+            // 2. TÍNH TOÁN THỐNG KÊ TỔNG QUÁT
             // =============================
             let totalCollected = 0;
             payments.forEach(p => {
                 totalCollected += p.Amount || 0;
             });
 
-            // =============================
-            // 4. TÍNH TỔNG CÔNG NỢ (TỪ REMAININGAMOUNT)
-            // =============================
             let totalDebt = 0;
             invoices.forEach(inv => {
                 totalDebt += inv.RemainingAmount || 0;
             });
 
-            // =============================
-            // 5. PHÂN LOẠI HÓA ĐƠN THEO PAYMENTSTATUS
-            // =============================
             let paid = 0;
             let partial = 0;
             let unpaid = 0;
 
             invoices.forEach(inv => {
                 const status = inv.PaymentStatus;
-
-                if (status === "Đã thanh toán") {
-                    paid++;
-                } else if (status === "Thanh toán một phần") {
-                    partial++;
-                } else if (status === "Chưa thanh toán") {
-                    unpaid++;
-                }
+                if (status === "Đã thanh toán") paid++;
+                else if (status === "Thanh toán một phần") partial++;
+                else if (status === "Chưa thanh toán") unpaid++;
             });
 
             setStatistics({
@@ -76,6 +68,65 @@ const StatisticsPage: React.FC = () => {
                 totalCollected,
                 totalDebt,
             });
+
+            // =============================
+            // 3. XỬ LÝ DỮ LIỆU BIỂU ĐỒ (THEO NGÀY TRONG THÁNG HIỆN TẠI)
+            // =============================
+            
+            const currentMonth = moment();
+            const startOfMonth = currentMonth.clone().startOf('month');
+            const endOfMonth = currentMonth.clone().endOf('month');
+
+            // Khởi tạo khung dữ liệu cho tất cả các ngày trong tháng
+            const dailyStats: { [key: string]: { date: string; collected: number; debt: number } } = {};
+            for (let d = startOfMonth.clone(); d.isSameOrBefore(endOfMonth); d.add(1, 'day')) {
+                const key = d.format('YYYY-MM-DD');
+                dailyStats[key] = { date: key, collected: 0, debt: 0 };
+            }
+
+            // Tính tiền đã thu (chỉ trong tháng hiện tại)
+            payments.forEach(p => {
+                let pDate;
+                if (p.PaymentDate?.toDate) {
+                    pDate = p.PaymentDate.toDate();
+                } else if (typeof p.PaymentDate === 'string') {
+                    pDate = new Date(p.PaymentDate);
+                } else {
+                    pDate = new Date(); 
+                }
+                
+                const mDate = moment(pDate);
+                if (mDate.isSame(currentMonth, 'month') && mDate.isSame(currentMonth, 'year')) {
+                    const key = mDate.format('YYYY-MM-DD');
+                    if (dailyStats[key]) {
+                        dailyStats[key].collected += (p.Amount || 0);
+                    }
+                }
+            });
+
+            // Tính công nợ (chỉ trong tháng hiện tại)
+            invoices.forEach(inv => {
+                let iDate;
+                if (inv.CreatedAt?.toDate) {
+                    iDate = inv.CreatedAt.toDate();
+                } else if (typeof inv.CreatedAt === 'string') {
+                    iDate = new Date(inv.CreatedAt);
+                } else {
+                    iDate = new Date();
+                }
+                
+                const mDate = moment(iDate);
+                if (mDate.isSame(currentMonth, 'month') && mDate.isSame(currentMonth, 'year')) {
+                    const key = mDate.format('YYYY-MM-DD');
+                     if (dailyStats[key]) {
+                        dailyStats[key].debt += (inv.RemainingAmount || 0);
+                    }
+                }
+            });
+
+            // Convert object to array và sort theo ngày
+            const chartArray = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
+            setChartData(chartArray);
 
         } catch (error) {
             console.error(error);
@@ -170,6 +221,39 @@ const StatisticsPage: React.FC = () => {
                     </Card>
                 </Col>
             </Row>
+
+            <div style={{ marginTop: '30px' }}>
+                <Title level={4}>Biểu đồ doanh thu và công nợ tháng {moment().format('MM/YYYY')}</Title>
+                <div style={{ width: '100%', height: 400, background: '#fff', padding: '20px', borderRadius: '8px', border: '1px solid #f0f0f0' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                            data={chartData}
+                            margin={{
+                                top: 20,
+                                right: 30,
+                                left: 20,
+                                bottom: 5,
+                            }}
+                        >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                                dataKey="date"
+                                tickFormatter={(tick) => moment(tick, 'YYYY-MM-DD').format('DD/MM dd')}
+                            />
+                            <YAxis
+                                tickFormatter={(value) => new Intl.NumberFormat('vi-VN', { notation: "compact", compactDisplay: "short" }).format(value)}
+                            />
+                            <Tooltip
+                                formatter={(value: any) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value)}
+                                labelFormatter={(label) => `Ngày ${moment(label, 'YYYY-MM-DD').format('DD/MM/YYYY')}`}
+                            />
+                            <Legend />
+                            <Bar dataKey="collected" name="Doanh thu thực thu" fill="#3f8600" />
+                            <Bar dataKey="debt" name="Công nợ phát sinh" fill="#cf1322" />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </div>
         </div>
     );
 };

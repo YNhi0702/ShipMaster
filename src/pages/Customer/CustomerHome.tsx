@@ -175,7 +175,7 @@ const CustomerHome: React.FC = () => {
                     type="primary"
                     size="large"
                     className="mb-5 bg-blue-600 hover:bg-blue-700 border-none"
-                    onClick={() => navigate('/createRepairOder')}
+                    onClick={() => navigate('/createRepairOrder')}
                 >
                     Tạo đơn sửa chữa mới
                 </Button>
