@@ -43,7 +43,14 @@ const OrderDetail: React.FC = () => {
 
     const [shipName, setShipName] = useState('');
     const [workshopName, setWorkshopName] = useState('');
+    const [workshopAddress, setWorkshopAddress] = useState('');
+    const [workshopPhone, setWorkshopPhone] = useState('');
+    const [workshopEmail, setWorkshopEmail] = useState('');
+
     const [userName, setUserName] = useState('');
+    const [userAddress, setUserAddress] = useState('');
+    const [userPhone, setUserPhone] = useState('');
+    
     const [loadingUser, setLoadingUser] = useState(true);
 
     const [canceling, setCanceling] = useState(false);
@@ -86,7 +93,10 @@ const OrderDetail: React.FC = () => {
                 const customerQuery = query(customersRef, where('uid', '==', uid));
                 const customerSnapshot = await getDocs(customerQuery);
                 if (!customerSnapshot.empty) {
-                    setUserName(customerSnapshot.docs[0].data().fullName || 'Khách hàng');
+                    const custData = customerSnapshot.docs[0].data();
+                    setUserName(custData.fullName || 'Khách hàng');
+                    setUserAddress(custData.address || ''); // Lấy địa chỉ
+                    setUserPhone(custData.phoneNumber || custData.phone || ''); // Lấy số điện thoại
                 }
             } catch {}
 
@@ -187,7 +197,15 @@ const OrderDetail: React.FC = () => {
             try {
                 if (orderData.workshopId) {
                     const wsSnap = await getDoc(doc(db, 'workShop', orderData.workshopId));
-                    setWorkshopName(wsSnap.exists() ? wsSnap.data().name : 'Không xác định');
+                    if (wsSnap.exists()) {
+                        const wsData = wsSnap.data();
+                        setWorkshopName(wsData.name || 'Không xác định');
+                        setWorkshopAddress(wsData.address || ''); // Lấy địa chỉ xưởng
+                        setWorkshopPhone(wsData.phoneNumber || wsData.phone || ''); // Lấy sđt xưởng
+                        setWorkshopEmail(wsData.email || ''); // Lấy email xưởng
+                    } else {
+                        setWorkshopName(orderData.workshopName || 'Không xác định');
+                    }
                 } else {
                     setWorkshopName(orderData.workshopName || 'Không xác định');
                 }
@@ -344,18 +362,34 @@ const OrderDetail: React.FC = () => {
 
             {/* Modal hiển thị hóa đơn */}
             <Modal
-                title="Hóa đơn"
+                title={null} // Ẩn tiêu đề mặc định
                 open={isInvoiceVisible}
                 onCancel={hideInvoice}
                 footer={null}
+                width={850} // Mở rộng modal để vừa hóa đơn
+                style={{ top: 20 }}
             >
                 <Invoice
                     shipName={shipName}
                     workshopName={workshopName}
+                    workshopAddress={workshopAddress}
+                    workshopPhone={workshopPhone}
+                    workshopEmail={workshopEmail}
                     createdAt={createdAt}
                     materialsCost={savedMaterialsCost}
                     laborCost={savedLaborCost}
                     totalCost={savedTotalCost}
+                    customerName={userName}
+                    customerAddress={userAddress}
+                    customerPhone={userPhone}
+                    invoiceId={orderData?.id}
+                    items={materialLines.map((m: any) => ({
+                        description: m.name,
+                        unit: m.unit,
+                        quantity: m.qty,
+                        unitPrice: m.unitPrice,
+                        amount: m.lineTotal
+                    }))}
                 />
             </Modal>
 

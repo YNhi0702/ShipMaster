@@ -27,6 +27,7 @@ const WorkshopManagement: React.FC = () => {
     const [userMap, setUserMap] = useState<Record<string, string>>({});
     const [potentialOwners, setPotentialOwners] = useState<UserOption[]>([]);
     const [form] = Form.useForm();
+    const [messageApi, contextHolder] = message.useMessage();
 
     const fetchPotentialOwners = async () => {
         try {
@@ -124,16 +125,19 @@ const WorkshopManagement: React.FC = () => {
 
                     if (name) {
                         newUserMap[uid] = name;
+                    } else {
+                        newUserMap[uid] = 'Chưa cập nhật';
                     }
                 } catch (e) {
                     console.error(`Error fetching user ${uid}`, e);
+                    newUserMap[uid] = 'Chưa cập nhật';
                 }
             }));
             setUserMap(newUserMap);
 
         } catch (error) {
             console.error("Error fetching workshops: ", error);
-            message.error('Không thể tải danh sách xưởng');
+            messageApi.error('Không thể tải danh sách xưởng');
         } finally {
             setLoading(false);
         }
@@ -159,32 +163,44 @@ const WorkshopManagement: React.FC = () => {
     const handleDelete = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'workShop', id));
-            message.success('Xóa xưởng thành công');
+            messageApi.success('Xóa xưởng thành công');
             fetchWorkshops();
         } catch (error) {
             console.error("Error deleting workshop: ", error);
-            message.error('Không thể xóa xưởng');
+            messageApi.error('Không thể xóa xưởng');
         }
     };
 
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
+
+            // Check duplicate name
+            const isDuplicate = workshops.some(w => 
+                w.name.trim().toLowerCase() === values.name.trim().toLowerCase() && 
+                (!editingWorkshop || w.id !== editingWorkshop.id)
+            );
+
+            if (isDuplicate) {
+                messageApi.error('Xưởng đã tồn tại');
+                return;
+            }
+
             if (editingWorkshop) {
                 // Update
                 const workshopRef = doc(db, 'workShop', editingWorkshop.id);
                 await updateDoc(workshopRef, values);
-                message.success('Cập nhật xưởng thành công');
+                messageApi.success('Cập nhật xưởng thành công');
             } else {
                 // Create
                 await addDoc(collection(db, 'workShop'), values);
-                message.success('Thêm xưởng thành công');
+                messageApi.success('Thêm xưởng thành công');
             }
             setIsModalVisible(false);
             fetchWorkshops();
         } catch (error) {
             console.error("Error saving workshop: ", error);
-            message.error('Có lỗi xảy ra khi lưu thông tin');
+            // message.error('Có lỗi xảy ra khi lưu thông tin'); // Prevent double error if validateFields fails
         }
     };
 
@@ -239,6 +255,7 @@ const WorkshopManagement: React.FC = () => {
 
     return (
         <div style={{ padding: '20px' }}>
+            {contextHolder}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
                 <h2 className="text-xl font-bold">Danh sách xưởng</h2>
                 <Button type="primary" icon={<PlusOutlined />} onClick={handleAdd}>

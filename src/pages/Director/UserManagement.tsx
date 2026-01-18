@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Select, message, Tag, Space, Popconfirm, Tooltip } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ReloadOutlined, KeyOutlined } from '@ant-design/icons';
-import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, updateDoc, deleteDoc, serverTimestamp, query, where } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, getAuth, sendPasswordResetEmail } from 'firebase/auth';
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { httpsCallable } from 'firebase/functions';
@@ -53,6 +53,7 @@ const UserManagement: React.FC = () => {
     const [passForm] = Form.useForm();
     const [form] = Form.useForm();
     const [submitting, setSubmitting] = useState(false);
+    const [messageApi, contextHolder] = message.useMessage();
 
     // Fetch users
     const fetchUsers = async () => {
@@ -65,7 +66,7 @@ const UserManagement: React.FC = () => {
             });
             setUsers(userList);
         } catch (error) {
-            message.error('Lỗi tải danh sách người dùng');
+            messageApi.error('Lỗi tải danh sách người dùng');
         } finally {
             setLoading(false);
         }
@@ -92,15 +93,15 @@ const UserManagement: React.FC = () => {
             setChangePassModalVisible(false);
             passForm.resetFields();
             
-            message.success(`Đã cập nhật mật khẩu thành công!`);
+            messageApi.success(`Đã cập nhật mật khẩu thành công!`);
             
         } catch (error: any) {
             console.error(error);
             // Nếu function chưa được deploy, nó sẽ lỗi. Fallback về thông báo cũ hoặc hiển thị lỗi.
             if (error.message.includes('internal') || error.message.includes('not found')) {
-                 message.warning("Chức năng đang được triển khai (Cloud Function). Vui lòng deploy backend để hoạt động.");
+                 messageApi.warning("Chức năng đang được triển khai (Cloud Function). Vui lòng deploy backend để hoạt động.");
             } else {
-                 message.error("Lỗi đổi mật khẩu: " + error.message);
+                 messageApi.error("Lỗi đổi mật khẩu: " + error.message);
             }
         } finally {
             setSubmitting(false);
@@ -121,9 +122,24 @@ const UserManagement: React.FC = () => {
                     phone: values.phone,
                     role: values.role,
                 });
-                message.success('Cập nhật thành công');
+                messageApi.success('Cập nhật thành công');
+                setModalVisible(false);
+                form.resetFields();
+                fetchUsers();
             } else {
                 // Create
+
+                // Check phone uniqueness first
+                const usersRef = collection(db, 'users');
+                const q = query(usersRef, where("phone", "==", values.phone));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    messageApi.error("Số điện thoại đã tồn tại!");
+                    setSubmitting(false);
+                    return;
+                }
+
                 // 1. Create in Auth (using secondary app)
                 const secondaryAuth = getSecondaryAuth();
                 const userCredential = await createUserWithEmailAndPassword(secondaryAuth, values.email, values.password);
@@ -149,15 +165,22 @@ const UserManagement: React.FC = () => {
                     });
                 }
 
-                message.success('Tạo người dùng thành công');
+                messageApi.success('Tạo người dùng thành công');
+                setModalVisible(false);
+                form.resetFields();
+                fetchUsers();
             }
-
-            setModalVisible(false);
-            form.resetFields();
-            fetchUsers();
         } catch (error: any) {
             console.error(error);
-            message.error('Có lỗi xảy ra: ' + error.message);
+            if (error.code === 'auth/email-already-in-use') {
+                messageApi.error("Email đã tồn tại!");
+            } else if (error.code === 'auth/invalid-email') {
+                messageApi.error("Email không hợp lệ!");
+            } else if (error.code === 'auth/weak-password') {
+                messageApi.error("Mật khẩu quá yếu! Mật khẩu phải có ít nhất 6 ký tự.");
+            } else {
+                messageApi.error("Có lỗi xảy ra: " + error.message);
+            }
         } finally {
             setSubmitting(false);
         }
@@ -277,6 +300,7 @@ const UserManagement: React.FC = () => {
 
     return (
         <div>
+            {contextHolder}
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">Danh sách người dùng</h2>
                 <Button 
