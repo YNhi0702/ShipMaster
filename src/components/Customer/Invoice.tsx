@@ -158,7 +158,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                         <div>
                             <h1 className={`text-2xl font-bold ${textColor} uppercase`}>Ship Master</h1>
                             <p className="text-xs">Giải pháp quản lý và sửa chữa tàu thủy</p>
-                            <p className="text-xs">Email: contact@shipmaster.vn</p>
+                            <p className="text-xs">Email: shipmaster@gmail.com</p>
                         </div>
                     </div>
                     <div className="text-right">
@@ -181,7 +181,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                             <span>Hải Phòng</span>
 
                             <span className={`font-bold ${textColor}`}>Email:</span>
-                            <span>contact@shipmaster.vn</span>
+                            <span>shipmaster@gmail.com</span>
 
                             <span className={`font-bold ${textColor}`}>Số tài khoản:</span>
                             <span className="font-bold">xxxx xxxx xxxx - Ngân hàng XXX</span>
