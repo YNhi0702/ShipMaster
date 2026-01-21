@@ -3,6 +3,7 @@ import { Button } from 'antd';
 import { DownloadOutlined } from '@ant-design/icons';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import moment from 'moment';
 
 interface InvoiceItem {
     description: string;
@@ -65,6 +66,14 @@ const Invoice: React.FC<InvoiceProps> = ({
 }) => {
     const invoiceRef = useRef<HTMLDivElement>(null);
 
+    // Xử lý ngày tháng an toàn
+    const invoiceDate = React.useMemo(() => {
+        if (!createdAt) return moment();
+        // Thử parse theo format VN trước, sau đó là ISO
+        const m = moment(createdAt, ['DD/MM/YYYY', 'YYYY-MM-DD', moment.ISO_8601]);
+        return m.isValid() ? m : moment();
+    }, [createdAt]);
+
     // Chuẩn bị dữ liệu hiển thị trong bảng
     const displayItems: InvoiceItem[] = items.length > 0 ? [...items] : [
         {
@@ -98,7 +107,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                 scale: 2,
                 useCORS: true, // Hỗ trợ tải ảnh từ nguồn khác nếu có
                 backgroundColor: '#ffffff', // Đảm bảo nền trắng khi xuất PDF
-            });
+            } as any);
             const imgData = canvas.toDataURL('image/png');
             
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -161,7 +170,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                     <div className="text-right">
                         <h2 className={`text-xl font-bold ${textColor} uppercase`}>Hóa đơn giá trị gia tăng</h2>
                         <h3 className={`text-lg font-bold ${textColor} uppercase mt-1`}>Dịch vụ sửa chữa tàu</h3>
-                        <p className="italic mt-1">Ngày {new Date(createdAt || Date.now()).getDate()} tháng {new Date(createdAt || Date.now()).getMonth() + 1} năm {new Date(createdAt || Date.now()).getFullYear()}</p>
+                        <p className="italic mt-1">Ngày {invoiceDate.date()} tháng {invoiceDate.month() + 1} năm {invoiceDate.year()}</p>
                     </div>
                 </div>
 

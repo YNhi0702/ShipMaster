@@ -275,7 +275,7 @@ const StatisticsPage: React.FC = () => {
                                 labelFormatter={(label) => `Ngày ${moment(label, 'YYYY-MM-DD').format('DD/MM/YYYY')}`}
                             />
                             <Legend />
-                            <Bar dataKey="collected" name="Doanh thu lũy kế" fill="#3f8600" />
+                            <Bar dataKey="collected" name="Doanh thu" fill="#3f8600" />
                         </BarChart> 
                     </ResponsiveContainer>
                 </div>

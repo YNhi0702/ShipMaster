@@ -156,7 +156,15 @@ const WorkshopManagement: React.FC = () => {
 
     const handleEdit = (record: Workshop) => {
         setEditingWorkshop(record);
-        form.setFieldsValue(record);
+        
+        // Kiểm tra xem ownerID hiện tại có nằm trong danh sách chủ xưởng (có tên) hay không
+        // Nếu không có trong danh sách (tức là không lấy được tên), thì set thành undefined để ô input trống
+        const ownerExists = potentialOwners.some(u => u.uid === record.ownerID);
+        
+        form.setFieldsValue({
+            ...record,
+            ownerID: ownerExists ? record.ownerID : undefined
+        });
         setIsModalVisible(true);
     };
 
