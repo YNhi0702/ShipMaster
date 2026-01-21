@@ -33,20 +33,12 @@ interface InvoiceProps {
 const formatMoney = (value: number) =>
     value?.toLocaleString('vi-VN', { style: 'decimal', maximumFractionDigits: 0 });
 
-// Hàm đọc số tiền thành chữ (cơ bản)
+// Hàm đọc số tiền thành chữ
 const readNumberToVietnamese = (number: number): string => {
     if (number === 0) return 'Không đồng';
-    // Đây là hàm placeholder đơn giản. 
-    // Trong thực tế nên dùng thư viện hoặc hàm đầy đủ hơn để đọc số tiền lớn.
-    // Vì không được dùng thư viện ngoài nếu chưa cài, ta sẽ dùng format string đơn giản
-    // hoặc bạn có thể yêu cầu cài thêm thư viện 'n2vi'.
-    // Ở đây mình sẽ trả về text đơn giản kèm số để tránh sai sót logic phức tạp.
     return `${number.toLocaleString('vi-VN')} đồng`; 
 };
 
-// Hàm đọc số đầy đủ hơn (nếu cần thiết, code chay sẽ khá dài)
-// Để đơn giản và chính xác, tạm thời hiển thị số + " đồng"
-// Nếu user cần chính xác "Năm trăm nghìn...", ta có thể bổ sung sau.
 
 const Invoice: React.FC<InvoiceProps> = ({
     shipName,
@@ -107,6 +99,8 @@ const Invoice: React.FC<InvoiceProps> = ({
                 scale: 2,
                 useCORS: true, // Hỗ trợ tải ảnh từ nguồn khác nếu có
                 backgroundColor: '#ffffff', // Đảm bảo nền trắng khi xuất PDF
+                height: element.scrollHeight, 
+                windowHeight: element.scrollHeight
             } as any);
             const imgData = canvas.toDataURL('image/png');
             
@@ -121,13 +115,13 @@ const Invoice: React.FC<InvoiceProps> = ({
             let pdfWidth = pageWidth;
             let pdfHeight = pdfWidth / ratio;
 
-            // Nếu ảnh dài hơn trang A4, co lại cho vừa chiều cao (scale to fit)
+            // Nếu ảnh dài hơn trang A4, co lại cho vừa chiều cao để luôn nằm trong 1 trang
             if (pdfHeight > pageHeight) {
                 pdfHeight = pageHeight;
                 pdfWidth = pdfHeight * ratio;
             }
 
-            const x = (pageWidth - pdfWidth) / 2; // Căn giữa theo chiều ngang nếu bị co lại
+            const x = (pageWidth - pdfWidth) / 2; 
 
             pdf.addImage(imgData, 'PNG', x, 0, pdfWidth, pdfHeight);
             pdf.save(`HoaDon_${invoiceId}.pdf`);
@@ -168,8 +162,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                         </div>
                     </div>
                     <div className="text-right">
-                        <h2 className={`text-xl font-bold ${textColor} uppercase`}>Hóa đơn giá trị gia tăng</h2>
-                        <h3 className={`text-lg font-bold ${textColor} uppercase mt-1`}>Dịch vụ sửa chữa tàu</h3>
+                        <h2 className={`text-xl font-bold ${textColor} uppercase`}>Hóa đơn sửa chữa tàu</h2>
                         <p className="italic mt-1">Ngày {invoiceDate.date()} tháng {invoiceDate.month() + 1} năm {invoiceDate.year()}</p>
                     </div>
                 </div>
@@ -183,10 +176,6 @@ const Invoice: React.FC<InvoiceProps> = ({
                             <span className={`font-bold ${textColor}`}>Đơn vị cung cấp dịch vụ:</span>
                             <span className="font-bold uppercase text-blue-800">Công ty TNHH Hưng Phong</span>
 
-                            {/** Ẩn Mã số thuế nếu chưa có data thật
-                            <span className={`font-bold ${textColor}`}>Mã số thuế:</span>
-                            <span>0312345678 (Mẫu)</span>
-                             */}
 
                             <span className={`font-bold ${textColor}`}>Địa chỉ:</span>
                             <span>Hải Phòng</span>
@@ -256,16 +245,8 @@ const Invoice: React.FC<InvoiceProps> = ({
                     </tbody>
                     <tfoot>
                         <tr>
-                            <td colSpan={5} className={`border ${borderColor} p-2 text-right font-bold ${textColor}`}>Cộng tiền hàng (Sub total):</td>
-                            <td className={`border ${borderColor} p-2 text-right font-bold`}>{formatMoney(totalCost)}</td>
-                        </tr>
-                        <tr>
-                            <td colSpan={5} className={`border ${borderColor} p-2 text-right font-bold ${textColor}`}>Thuế suất GTGT (VAT rate): 10%</td>
-                            <td className={`border ${borderColor} p-2 text-right font-bold`}>{formatMoney(totalCost * 0.1)}</td>
-                        </tr>
-                        <tr>
                             <td colSpan={5} className={`border ${borderColor} p-2 text-right font-bold ${textColor}`}>Tổng cộng tiền thanh toán (Total payment):</td>
-                            <td className={`border ${borderColor} p-2 text-right font-bold text-red-600 text-lg`}>{formatMoney(totalCost * 1.1)}</td>
+                            <td className={`border ${borderColor} p-2 text-right font-bold text-red-600 text-lg`}>{formatMoney(totalCost)}</td>
                         </tr>
                     </tfoot>
                 </table>
@@ -273,7 +254,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                 {/* Bằng chữ */}
                 <div className={`border-b-2 ${borderColor} pb-2 mb-6`}>
                     <span className="font-bold italic">Số tiền viết bằng chữ (Amount in words): </span>
-                    <span className="italic">{readNumberToVietnamese(Math.round(totalCost * 1.1))} (đã bao gồm VAT)</span>
+                    <span className="italic">{readNumberToVietnamese(Math.round(totalCost))}</span>
                 </div>
 
                 {/* Chữ ký */}

@@ -78,11 +78,11 @@ const StatisticsPage: React.FC = () => {
             const endOfMonth = currentMonth.clone().endOf('month');
 
             // Khởi tạo khung dữ liệu cho tất cả các ngày trong tháng (chỉ đến hiện tại)
-            const dailyStats: { [key: string]: { date: string; collected: number; invoiced: number } } = {};
+            const dailyStats: { [key: string]: { date: string; collected: number } } = {};
             // Thay vì loop đến endOfMonth, ta chỉ loop đến currentMonth (hôm nay)
             for (let d = startOfMonth.clone(); d.isSameOrBefore(currentMonth, 'day'); d.add(1, 'day')) {
                 const key = d.format('YYYY-MM-DD');
-                dailyStats[key] = { date: key, collected: 0, invoiced: 0 };
+                dailyStats[key] = { date: key, collected: 0 };
             }
 
             // Tính tiền đã thu (chỉ trong tháng hiện tại) - DOANH THU
@@ -105,50 +105,21 @@ const StatisticsPage: React.FC = () => {
                 }
             });
 
-            // Tính tổng tiền hóa đơn phát sinh (chỉ trong tháng hiện tại) - ĐỂ TÍNH CÔNG NỢ
-            invoices.forEach(inv => {
-                let iDate;
-                if (inv.CreatedAt?.toDate) {
-                    iDate = inv.CreatedAt.toDate();
-                } else if (typeof inv.CreatedAt === 'string') {
-                    iDate = new Date(inv.CreatedAt);
-                } else {
-                    iDate = new Date();
-                }
-                
-                const mDate = moment(iDate);
-                if (mDate.isSame(currentMonth, 'month') && mDate.isSame(currentMonth, 'year')) {
-                    const key = mDate.format('YYYY-MM-DD');
-                     if (dailyStats[key]) {
-                         // Dùng TotalAmount nếu có, nếu không thì fallback (cần đảm bảo đúng field)
-                        dailyStats[key].invoiced += (inv.TotalAmount || inv.totalAmount || 0);
-                    }
-                }
-            });
-
             // Convert object to array và sort theo ngày
             const chartArray = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
 
             // Cập nhật: Tính lũy kế (Cumulative) từ đầu tháng
             // Logic: 
             // - Doanh thu lũy kế = Cộng dồn tiền đã thu (collected)
-            // - Công nợ lũy kế = (Cộng dồn hóa đơn phát sinh - Cộng dồn tiền đã thu) -> hay chính là outstanding balance của tháng
-            //   (Giả sử đầu tháng = 0 cho phạm vi biểu đồ này, hoặc chỉ tính phát sinh trong tháng)
 
             let runningCollected = 0;
-            let runningInvoiced = 0;
 
             const cumulativeChartData = chartArray.map(item => {
                 runningCollected += item.collected;
-                runningInvoiced += item.invoiced;
                 
-                // Công nợ = Tổng hóa đơn - Tổng đã trả (trong phạm vi tháng này)
-                const currentDebt = runningInvoiced - runningCollected;
-
                 return {
                     ...item,
                     collected: runningCollected, 
-                    debt: currentDebt > 0 ? currentDebt : 0, // Nếu trả dư (âm) thì hiển thị 0 hoặc để nguyên tùy logic (để 0 cho đẹp)
                 };
             });
 
