@@ -77,8 +77,6 @@ const Invoice: React.FC<InvoiceProps> = ({
         }
     ];
 
-    // Luôn thêm dòng nhân công nếu có và chưa có trong items
-    // (Giả sử items chỉ là materials)
     const hasLabor = displayItems.find(i => i.description.includes('nhân công'));
     if (!hasLabor && laborCost > 0) {
         displayItems.push({
@@ -97,7 +95,7 @@ const Invoice: React.FC<InvoiceProps> = ({
             const element = invoiceRef.current;
             const canvas = await html2canvas(element, {
                 scale: 2,
-                useCORS: true, // Hỗ trợ tải ảnh từ nguồn khác nếu có
+                useCORS: true, 
                 backgroundColor: '#ffffff', // Đảm bảo nền trắng khi xuất PDF
                 height: element.scrollHeight, 
                 windowHeight: element.scrollHeight
@@ -105,8 +103,8 @@ const Invoice: React.FC<InvoiceProps> = ({
             const imgData = canvas.toDataURL('image/png');
             
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pageWidth = pdf.internal.pageSize.getWidth(); // 210mm
-            const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
+            const pageWidth = pdf.internal.pageSize.getWidth(); 
+            const pageHeight = pdf.internal.pageSize.getHeight(); 
 
             const imgWidth = canvas.width;
             const imgHeight = canvas.height;
@@ -167,7 +165,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                     </div>
                 </div>
 
-                {/* Phần thông tin Người bán / Người mua - Khung xanh bo góc */}
+                {/* Phần thông tin Người bán / Người mua*/}
                 <div className={`border-2 ${borderColor} rounded-md mb-4`}>
                     
                     {/* Seller */}
@@ -230,7 +228,7 @@ const Invoice: React.FC<InvoiceProps> = ({
                             </tr>
                         ))}
                         
-                        {/* Dòng trống để lấp đầy bảng cho đẹp giống mẫu nếu ít item */}
+                        {/* Dòng trống  */}
                         {Array.from({ length: Math.max(0, 5 - displayItems.length) }).map((_, i) => (
                             <tr key={`empty-${i}`}>
                                 <td className={`border ${borderColor} p-2 h-8`}></td>

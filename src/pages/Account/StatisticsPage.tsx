@@ -26,19 +26,12 @@ const StatisticsPage: React.FC = () => {
     const fetchStatistics = async () => {
         try {
             setLoading(true);
-
-            // =============================
-            // 1. LẤY DANH SÁCH HÓA ĐƠN VÀ PAYMENT
-            // =============================
             const invoiceSnap = await getDocs(collection(db, "invoice"));
             const invoices = invoiceSnap.docs.map(doc => doc.data());
 
             const paymentSnap = await getDocs(collection(db, "payment"));
             const payments = paymentSnap.docs.map(doc => doc.data());
 
-            // =============================
-            // 2. TÍNH TOÁN THỐNG KÊ TỔNG QUÁT
-            // =============================
             let totalCollected = 0;
             payments.forEach(p => {
                 totalCollected += p.Amount || 0;
@@ -68,11 +61,7 @@ const StatisticsPage: React.FC = () => {
                 totalCollected,
                 totalDebt,
             });
-
-            // =============================
-            // 3. XỬ LÝ DỮ LIỆU BIỂU ĐỒ (THEO NGÀY TRONG THÁNG HIỆN TẠI)
-            // =============================
-            
+            // 3. XỬ LÝ DỮ LIỆU BIỂU ĐỒ (THEO NGÀY TRONG THÁNG HIỆN TẠI)            
             const currentMonth = moment();
             const startOfMonth = currentMonth.clone().startOf('month');
             const endOfMonth = currentMonth.clone().endOf('month');
@@ -109,9 +98,6 @@ const StatisticsPage: React.FC = () => {
             const chartArray = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
 
             // Cập nhật: Tính lũy kế (Cumulative) từ đầu tháng
-            // Logic: 
-            // - Doanh thu lũy kế = Cộng dồn tiền đã thu (collected)
-
             let runningCollected = 0;
 
             const cumulativeChartData = chartArray.map(item => {
