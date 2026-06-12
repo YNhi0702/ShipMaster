@@ -25,7 +25,6 @@ const PaymentTable: React.FC<Props> = ({ orders, loading, onPay, onShowHistory }
     const columns = [
         { title: "STT", width: 50, render: (_: any, __: any, idx: number) => idx + 1 },
         { title: "Tàu", dataIndex: "shipName" },
-        { title: "Tổng tiền", dataIndex: "totalAmount", render: (v: number) => formatCurrency(v) },
         { title: "Còn lại", dataIndex: "remainingAmount", render: (v: number) => formatCurrency(v) },
         {
             title: "Trạng thái",

@@ -7,7 +7,21 @@ import { db, auth } from '../../firebase';
 import WorkshopLayout from '../../components/Workshop/WorkshopLayout';
 
 const { Title } = Typography;
-const LABOR_DAY_RATE = 350000; // đơn giá ngày công cố định
+const EXPERTISE_RATES: { [key: string]: number } = {
+    'Thợ hàn / cơ khí vỏ tàu': 600000,
+    'Thợ máy tàu': 800000,
+    'Thợ điện tàu': 650000,
+    'Thợ sơn / vệ sinh tàu': 450000,
+};
+
+const getExpertiseRate = (expertise: string): number => {
+    if (!expertise) return 350000; // default fallback
+    const normalized = expertise.trim().toLowerCase();
+    for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
+        if (key.toLowerCase() === normalized) return rate;
+    }
+    return 350000; // default fallback
+};
 
 const OrderInfo: React.FC = () => {
     const { id } = useParams();
@@ -220,7 +234,10 @@ const OrderInfo: React.FC = () => {
                                 const ll = lsnap.docs.map(d => {
                                     const data = d.data() as any;
                                     const days = Math.max(1, Number(data.Days ?? data.Quantity ?? data.qty ?? 0) || 1);
-                                    const unitPrice = Number(data.UnitPrice || LABOR_DAY_RATE);
+                                    const expertise = (data.Expertise || data.expertise || '').toString().trim();
+                                    const storedRate = Number(data.UnitPrice || 350000);
+                                    const expertiseBasedRate = expertise ? getExpertiseRate(expertise) : null;
+                                    const unitPrice = expertiseBasedRate ?? storedRate;
                                     return {
                                         id: d.id,
                                         employeeId: data.Employee_ID || data.employeeId || '',
@@ -418,8 +435,7 @@ const OrderInfo: React.FC = () => {
                             <Card size="small" title="Nhân công đề xuất" className="mt-4" style={{ width: '100%' }}>
                                 <Row gutter={8} className="mb-2 font-medium">
                                     <Col span={12}><div>Nhân viên</div></Col>
-                                    <Col span={8}><div>Công việc</div></Col>
-                                    <Col span={4}><div>Số ngày</div></Col>
+                                        <Col span={12}><div>Số ngày</div></Col>
                                 </Row>
 
                                 {laborLines.map((line, idx) => (
@@ -427,10 +443,7 @@ const OrderInfo: React.FC = () => {
                                         <Col span={12}>
                                             <div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div>
                                         </Col>
-                                        <Col span={8}>
-                                            <div style={{ paddingTop: 6, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{line.description || '-'}</div>
-                                        </Col>
-                                        <Col span={4}>
+                                            <Col span={12}>
                                             <div style={{ paddingTop: 6 }}>{line.days}</div>
                                         </Col>
                                     </Row>

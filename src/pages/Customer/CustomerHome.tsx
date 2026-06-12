@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Button, Table, Typography, Avatar, message } from 'antd';
-import { UserOutlined } from '@ant-design/icons';
+import { Layout, Button, Table, Typography, message, Card, Space, Tag } from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -12,6 +12,7 @@ const { Title } = Typography;
 const CustomerHome: React.FC = () => {
     const navigate = useNavigate();
     const [userName, setUserName] = useState('');
+    const [myReferralCode, setMyReferralCode] = useState('');
     const [orders, setOrders] = useState<any[]>([]);
     const [loadingUser, setLoadingUser] = useState(true);
     const [loadingOrders, setLoadingOrders] = useState(true);
@@ -30,7 +31,9 @@ const CustomerHome: React.FC = () => {
                 const customerQuery = query(customersRef, where('uid', '==', uid));
                 const customerSnapshot = await getDocs(customerQuery);
                 if (!customerSnapshot.empty) {
-                    setUserName(customerSnapshot.docs[0].data().fullName || 'Khách hàng');
+                    const customerData = customerSnapshot.docs[0].data();
+                    setUserName(customerData.fullName || 'Khách hàng');
+                    setMyReferralCode(customerData.myreferralCode || '');
                 }
 
                 // Lấy danh sách đơn sửa chữa
@@ -67,12 +70,17 @@ const CustomerHome: React.FC = () => {
                             console.warn('Không thể lấy tên xưởng:', order.workshopId);
                         }
 
+                        const totalCost = Number(order.totalCost || order.TotalCost || order.totalPrice || order.TotalPrice || 0);
+                        const rawStatus = order.Status || order.status || order.currentStatus || '';
+
                         return {
                             id: docSnap.id,
                             ...order,
                             createdAt,
                             shipName,
                             workshopName,
+                            totalCost,
+                            rawStatus,
                         };
                     })
                 );
@@ -127,6 +135,20 @@ const CustomerHome: React.FC = () => {
         return '';
     };
 
+    const handleCopyReferralCode = async () => {
+        if (!myReferralCode) {
+            message.warning('Chưa có mã giới thiệu để sao chép.');
+            return;
+        }
+
+        try {
+            await navigator.clipboard.writeText(myReferralCode);
+            message.success('Đã sao chép mã giới thiệu');
+        } catch (error) {
+            message.error('Không thể sao chép mã giới thiệu');
+        }
+    };
+
 
     const columns = [
         {
@@ -134,6 +156,12 @@ const CustomerHome: React.FC = () => {
             dataIndex: 'shipName',
             key: 'shipName',
         },
+        {
+            title: 'Xưởng',
+            dataIndex: 'workshopName',
+            key: 'workshopName',
+        },
+        
         {
             title: 'Ngày tạo',
             dataIndex: 'createdAt',
@@ -143,7 +171,8 @@ const CustomerHome: React.FC = () => {
             title: 'Trạng thái',
             dataIndex: 'Status',
             key: 'Status',
-            render: (status: string) => {
+            render: (_: string, record: any) => {
+                const status = record.Status || record.status || record.currentStatus || '';
                 let color = 'text-blue-600';
                 if (status === 'Hoàn thành') color = 'text-green-600 font-semibold';
                 else if (status === 'Đang giám định') color = 'text-yellow-600 font-semibold';
@@ -171,6 +200,29 @@ const CustomerHome: React.FC = () => {
     return (
         <CustomerLayout userName={userName} loadingUser={loadingUser}>
             <div className="m-0 p-0">
+                <Card className="mb-5 shadow-sm border border-blue-100 bg-gradient-to-r from-blue-50 to-white">
+                    <Space direction="vertical" size={8} className="w-full">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                            <div>
+                                <div className="text-sm text-gray-500">Mã giới thiệu của bạn</div>
+                                <div className="text-2xl font-semibold tracking-wider text-blue-700">
+                                    {myReferralCode || 'Chưa có mã'}
+                                </div>
+                            </div>
+                            <Button
+                                type="primary"
+                                icon={<CopyOutlined />}
+                                onClick={handleCopyReferralCode}
+                                disabled={!myReferralCode}
+                            >
+                                Sao chép
+                            </Button>
+                        </div>
+                        <div className="text-sm text-gray-600">
+                            Chia sẻ mã giới thiệu của bạn cho khách hàng mới. Khi khách hàng đó phát sinh đơn hàng đầu tiên,giảm 5% trên giá trị đơn hàng.
+                        </div>
+                    </Space>
+                </Card>
                 <Button
                     type="primary"
                     size="large"

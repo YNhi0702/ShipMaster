@@ -1,0 +1,46 @@
+@startuml
+scale 1.0
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam dpi 180
+top to bottom direction
+
+title Thiet ke chi tiet goi cua doi tuong Thanh toan va Hoa don
+
+package "Presentation" {
+  class AccountHomePage
+  class PaymentListPage
+  class StatisticsPage
+  class InvoiceComponent
+}
+
+package "Application" {
+  class PaymentService
+}
+
+package "Data Access" {
+  interface InvoiceRepository
+  interface PaymentRepository
+  interface RepairOrderRepository
+}
+
+package "Data" {
+  class Invoice
+  class Payment
+  class RepairOrder
+}
+
+AccountHomePage ..> PaymentService
+PaymentListPage ..> PaymentService
+StatisticsPage ..> PaymentService
+InvoiceComponent ..> PaymentService
+PaymentService ..> InvoiceRepository
+PaymentService ..> PaymentRepository
+PaymentService ..> RepairOrderRepository
+InvoiceRepository ..> Invoice
+PaymentRepository ..> Payment
+RepairOrderRepository ..> RepairOrder
+
+@enduml

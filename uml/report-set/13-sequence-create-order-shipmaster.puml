@@ -1,0 +1,28 @@
+@startuml
+scale 1.0
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+skinparam shadowing false
+skinparam dpi 180
+autonumber
+
+title Bieu do trinh tu cho ca su dung Tao don sua chua
+
+actor Customer
+participant CreateOrder
+participant Storage
+participant Firestore
+
+Customer -> CreateOrder : Mo man hinh va nhap thong tin
+CreateOrder -> Firestore : Lay danh sach tau / xuong
+Firestore --> CreateOrder : Du lieu hien thi
+Customer -> CreateOrder : Chon anh va nhan Tao don
+CreateOrder -> Storage : Tai anh len
+Storage --> CreateOrder : URL anh
+CreateOrder -> Firestore : Luu tau neu can
+Firestore --> CreateOrder : shipId
+CreateOrder -> Firestore : Tao repairOrder
+Firestore --> CreateOrder : Thanh cong
+CreateOrder --> Customer : Thong bao thanh cong
+
+@enduml

@@ -1,0 +1,76 @@
+@startuml
+scale 0.9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 15
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam dpi 180
+top to bottom direction
+
+title Bieu do lop cho cac chuc nang lien quan den Don sua chua
+
+class CreateOrder {
+  - ships : any[]
+  - workshops : any[]
+  - fileList : any[]
+  + fetchData() : Promise<void>
+  + handleUpload() : Promise<void>
+}
+
+class CustomerHome {
+  - orders : any[]
+  + fetchData() : Promise<void>
+}
+
+class OrderDetail {
+  - orderData : any
+  - materialLines : any[]
+  + fetchOrder() : Promise<void>
+  + handleAcceptProposal() : Promise<void>
+}
+
+class InspectorHome {
+  - orders : any[]
+  - proposalOrders : any[]
+  + fetchOrdersData() : Promise<void>
+}
+
+class OrderDetailInspector {
+  - orderData : any
+  + handleReceiveOrder() : Promise<void>
+}
+
+class ProposalInspector {
+  - materialLines : any[]
+  - laborLines : any[]
+  + handleSubmitProposal(values) : Promise<void>
+}
+
+class WorkshopHome {
+  - orders : any[]
+  + fetchOrdersForWorkshop() : Promise<void>
+}
+
+class OrderInfo {
+  - order : any
+  - materialLines : any[]
+  - laborLines : any[]
+  + load() : Promise<void>
+}
+
+class FirebaseOrderService {
+  + getOrderById() : Promise<any>
+  + createOrder() : Promise<void>
+  + updateOrder() : Promise<void>
+}
+
+CreateOrder ..> FirebaseOrderService
+CustomerHome ..> FirebaseOrderService
+OrderDetail ..> FirebaseOrderService
+InspectorHome ..> FirebaseOrderService
+OrderDetailInspector ..> FirebaseOrderService
+ProposalInspector ..> FirebaseOrderService
+WorkshopHome ..> FirebaseOrderService
+OrderInfo ..> FirebaseOrderService
+
+@enduml

@@ -4,6 +4,23 @@ import { addDoc, collection, getDocs, doc, getDoc, query, where, serverTimestamp
 import { db } from '../../firebase';
 
 const { Title } = Typography;
+
+const EXPERTISE_RATES: { [key: string]: number } = {
+    'Thợ hàn / cơ khí vỏ tàu': 600000,
+    'Thợ máy tàu': 800000,
+    'Thợ điện tàu': 650000,
+    'Thợ sơn / vệ sinh tàu': 450000,
+};
+
+const getExpertiseRate = (expertise: string): number => {
+    if (!expertise) return 350000; // default fallback
+    const normalized = expertise.trim().toLowerCase();
+    for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
+        if (key.toLowerCase() === normalized) return rate;
+    }
+    return 350000; // default fallback
+};
+
 const DEFAULT_LABOR_RATE = 350000;
 
 const parseAmount = (value: any, fallback = 0): number => {
@@ -59,6 +76,33 @@ const safeNumber = (value: any, fallback = 0): number => {
     return fallback;
 };
 
+const resolveOrderCustomerId = (orderData: Record<string, any> | null | undefined, fallback?: any): string => {
+    const candidateIds = [
+        orderData?.Customer_ID,
+        orderData?.customerId,
+        orderData?.CustomerId,
+        orderData?.customer_id,
+        orderData?.uid,
+        orderData?.createdBy,
+        orderData?.userId,
+        orderData?.creatorId,
+        orderData?.owner,
+        orderData?.customer?.id,
+        fallback?.customerId,
+        fallback?.Customer_ID,
+        fallback?.customer_id,
+        fallback?.uid,
+        fallback?.createdBy,
+        fallback?.userId,
+        fallback?.creatorId,
+        fallback?.owner,
+        fallback?.customer?.id,
+    ];
+
+    const resolved = candidateIds.find((value) => typeof value === 'string' && value.trim().length > 0);
+    return resolved ? String(resolved).trim() : '';
+};
+
 const AccountHome: React.FC = () => {
     const [invoices, setInvoices] = useState<any[]>([]);
     const [loadingInvoices, setLoadingInvoices] = useState<boolean>(true);
@@ -67,6 +111,8 @@ const AccountHome: React.FC = () => {
     const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
     const [materialLines, setMaterialLines] = useState<any[]>([]);
     const [laborLines, setLaborLines] = useState<any[]>([]);
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [discountEligible, setDiscountEligible] = useState(false);
     const [savingInvoice, setSavingInvoice] = useState(false);
     const selectedOrderIdRef = useRef<string | null>(null);
 
@@ -78,6 +124,100 @@ const AccountHome: React.FC = () => {
         setSelectedOrder(null);
         setMaterialLines([]);
         setLaborLines([]);
+        setDiscountAmount(0);
+        setDiscountEligible(false);
+    };
+
+    const evaluateDiscount = async (orderOrId: any) => {
+        // Accept either order object or order id string
+        let orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId?.id;
+        if (!orderId && orderOrId) {
+            // try to extract id-like fields
+            orderId = orderOrId?.RepairOrder_ID || orderOrId?.repairOrderId || orderOrId?.orderId || null;
+        }
+
+        if (!orderId) {
+            setDiscountAmount(0);
+            setDiscountEligible(false);
+            return;
+        }
+
+        try {
+            const orderSnap = await getDoc(doc(db, 'repairOrder', orderId));
+            const orderData = orderSnap.exists() ? (orderSnap.data() as any) : (typeof orderOrId === 'object' ? orderOrId : null);
+            const customerId = resolveOrderCustomerId(orderData, orderOrId);
+
+            if (!customerId) {
+                setDiscountAmount(0);
+                setDiscountEligible(false);
+                return;
+            }
+
+            // Fetch customer record robustly
+            let customerData: any = null;
+            try {
+                const customerSnap = await getDoc(doc(db, 'customers', String(customerId)));
+                customerData = customerSnap.exists() ? (customerSnap.data() as any) : null;
+            } catch (e) {
+                // ignore
+            }
+
+            if (!customerData) {
+                const customerQuerySnap = await getDocs(
+                    query(collection(db, 'customers'), where('uid', '==', String(customerId)))
+                );
+                customerData = customerQuerySnap.empty ? null : (customerQuerySnap.docs[0].data() as any);
+            }
+
+            const referredByUid = (customerData && (customerData.referredByUid || customerData.referredBy || customerData.referred_uid)) || '';
+
+            if (!referredByUid) {
+                setDiscountAmount(0);
+                setDiscountEligible(false);
+                return;
+            }
+
+            // Check existing invoices for this customer. If any invoice exists, they are not eligible.
+            try {
+                const invoiceSnapshot = await getDocs(collection(db, 'invoice'));
+                const customerInvoices = invoiceSnapshot.docs.filter((invDoc) => {
+                    const inv = invDoc.data() as any;
+                    const invCustomerId = String(
+                        inv?.Customer_ID ||
+                        inv?.customerId ||
+                        inv?.CustomerId ||
+                        inv?.customer_id ||
+                        inv?.customer_uid ||
+                        inv?.uid ||
+                        inv?.createdBy ||
+                        inv?.userId ||
+                        ''
+                    );
+                    return invCustomerId === String(customerId);
+                });
+
+                const hasExistingInvoice = customerInvoices.length > 0;
+                const eligible = Boolean(referredByUid) && !hasExistingInvoice;
+                setDiscountEligible(eligible);
+                setDiscountAmount(eligible ? 0.05 : 0);
+
+                if (eligible) {
+                    // show a small toast so user can see discount applied
+                    message.success('Áp dụng giảm giá 5% cho hóa đơn đầu tiên của khách được giới thiệu.');
+                    console.debug('evaluateDiscount: eligible=true', { orderId, customerId, referredByUid });
+                } else {
+                    console.debug('evaluateDiscount: eligible=false', { orderId, customerId, referredByUid, hasExistingInvoice });
+                }
+            } catch (err) {
+                console.warn('Failed to check existing invoices for discount eligibility', err);
+                setDiscountEligible(false);
+                setDiscountAmount(0);
+            }
+        } catch (error) {
+            console.warn('Failed to evaluate discount eligibility', error);
+            setDiscountAmount(0);
+            setDiscountEligible(false);
+        }
     };
 
     const loadOrderDetails = async (orderId: string) => {
@@ -310,6 +450,11 @@ const AccountHome: React.FC = () => {
 
                 const employeeName = (data?.EmployeeName || data?.employeeName || data?.Employee || data?.employee || data?.WorkerName || employeeInfo?.UserName || employeeInfo?.fullName || employeeInfo?.name) || `Nhân công ${index + 1}`;
                 const jobName = (data?.JobName || data?.jobName || data?.Task || data?.task || data?.Work || data?.work || data?.WorkDescription || data?.Description || data?.description) || '';
+                const expertise = (data?.Expertise || data?.expertise || '').toString().trim();
+
+                // Use expertise-based rate if available, otherwise use stored rate or default
+                const expertiseBasedRate = expertise ? getExpertiseRate(expertise) : null;
+                const finalUnitRate = expertiseBasedRate ?? unitRate;
 
                 return {
                     id: docSnap.id,
@@ -317,8 +462,9 @@ const AccountHome: React.FC = () => {
                     employeeName,
                     jobName,
                     days,
-                    unitRate,
-                    cost: totalCost,
+                    expertise,
+                    unitRate: finalUnitRate,
+                    cost: days * finalUnitRate,
                     rawData: data,
                 };
             });
@@ -339,13 +485,24 @@ const AccountHome: React.FC = () => {
         }
     };
 
-    const handleCreateInvoice = (record: any) => {
+    const handleCreateInvoice = async (record: any) => {
         setSelectedOrder(record);
         selectedOrderIdRef.current = record.id;
         setInvoiceModalOpen(true);
         setMaterialLines([]);
         setLaborLines([]);
-        loadOrderDetails(record.id);
+        setDiscountAmount(0);
+        setDiscountEligible(false);
+
+        // Load order lines first so grandTotal is available when evaluating discount
+        try {
+            await loadOrderDetails(record.id);
+        } catch (err) {
+            // ignore — loadOrderDetails already reports errors
+        }
+
+        // Evaluate discount after lines are loaded to ensure totals are correct
+        evaluateDiscount(record);
     };
 
     const handleCloseInvoiceModal = () => {
@@ -400,6 +557,14 @@ const AccountHome: React.FC = () => {
         [laborLines]
     );
     const grandTotal = useMemo(() => materialTotal + laborTotal, [materialTotal, laborTotal]);
+    const appliedDiscountValue = useMemo(
+        () => (discountEligible ? Math.round(grandTotal * discountAmount) : 0),
+        [discountEligible, discountAmount, grandTotal]
+    );
+    const discountedGrandTotal = useMemo(
+        () => grandTotal - appliedDiscountValue,
+        [grandTotal, appliedDiscountValue]
+    );
 
     const handleSaveInvoice = async () => {
         try {
@@ -417,13 +582,74 @@ const AccountHome: React.FC = () => {
                 return;
             }
 
+            const customerUidForInvoice = resolveOrderCustomerId(selectedOrder, selectedOrder) || null;
+
+            // Determine if customer already has invoices (by checking multiple candidate fields)
+            let hasExistingCustomerInvoice = false;
+            try {
+                const invoiceSnapshot = await getDocs(collection(db, 'invoice'));
+                const customerInvoices = invoiceSnapshot.docs.filter((invDoc) => {
+                    const inv = invDoc.data() as any;
+                    const invCustomerId = String(
+                        inv?.Customer_ID ||
+                        inv?.customerId ||
+                        inv?.CustomerId ||
+                        inv?.customer_id ||
+                        inv?.customer_uid ||
+                        inv?.uid ||
+                        inv?.createdBy ||
+                        inv?.userId ||
+                        ''
+                    );
+                    return invCustomerId === String(customerUidForInvoice);
+                });
+                hasExistingCustomerInvoice = customerInvoices.length > 0;
+            } catch (err) {
+                console.warn('Failed to check existing invoices for customer', err);
+            }
+
+            // stt: 0 if customer had previous invoice(s), otherwise 1
+            const sttValue = hasExistingCustomerInvoice ? 0 : 1;
+
+            // Re-check customer referral to decide discount eligibility for first invoice
+            let referredByUid = '';
+            if (customerUidForInvoice) {
+                try {
+                    const customerSnap = await getDoc(doc(db, 'customers', String(customerUidForInvoice)));
+                    if (customerSnap.exists()) {
+                        const cust = customerSnap.data() as any;
+                        referredByUid = cust?.referredByUid || '';
+                    } else {
+                        const customerQuerySnap = await getDocs(
+                            query(collection(db, 'customers'), where('uid', '==', String(customerUidForInvoice)))
+                        );
+                        if (!customerQuerySnap.empty) {
+                            const cust = customerQuerySnap.docs[0].data() as any;
+                            referredByUid = cust?.referredByUid || '';
+                        }
+                    }
+                } catch (err) {
+                    console.warn('Failed to load customer to check referral', err);
+                }
+            }
+
+            const isFirstInvoice = sttValue === 1;
+            const discountRateToApply = isFirstInvoice && referredByUid ? 0.05 : 0;
+            const discountValueToApply = Math.round(grandTotal * discountRateToApply);
+            const finalAmount = Math.max(0, grandTotal - discountValueToApply);
+
             const invoicePayload = {
                 Invoice_ID: Date.now(),
                 RepairOrder_ID: selectedOrder.id,
-                Customer_ID: selectedOrder.customerId || null,
+                Customer_ID: customerUidForInvoice || selectedOrder.customerId || null,
                 OrderCode: selectedOrder.orderCode || null,
-                TotalAmount: grandTotal,
-                RemainingAmount:grandTotal,
+                stt: sttValue,
+                TotalAmount: finalAmount,
+                OriginalTotalAmount: grandTotal,
+                DiscountRate: discountRateToApply,
+                DiscountAmount: discountValueToApply,
+                FinalAmount: finalAmount,
+                RemainingAmount: finalAmount,
                 PaymentMethod: 'Chưa xác định',
                 PaymentStatus: 'Chưa thanh toán',
                 CreatedDate: serverTimestamp(),
@@ -525,14 +751,7 @@ const AccountHome: React.FC = () => {
                         totalCost,
                         status: readableStatus,
                         completedAt: formattedCompletion,
-                        customerId:
-                            data?.Customer_ID ||
-                            data?.customerId ||
-                            data?.CustomerId ||
-                            data?.customer_id ||
-                            data?.Customer?.id ||
-                            data?.customer?.id ||
-                            null,
+                        customerId: resolveOrderCustomerId(data),
                     };
                 })
             );
@@ -712,9 +931,15 @@ const AccountHome: React.FC = () => {
                             </div>
                         </Card>
                         <Card size="small" className="shadow-sm">
+                            {discountEligible && appliedDiscountValue > 0 && (
+                                <div className="flex justify-between items-center text-sm mt-2 text-green-600">
+                                    <span>Giảm giá 5% cho đơn đầu tiên</span>
+                                    <strong>-{formatCurrency(appliedDiscountValue)}</strong>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center text-base">
                                 <span>Tổng chi phí</span>
-                                <strong>{formatCurrency(grandTotal)}</strong>
+                                <strong>{formatCurrency(discountedGrandTotal)}</strong>
                             </div>
                         </Card>
                     </div>

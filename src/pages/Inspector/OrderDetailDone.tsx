@@ -6,7 +6,21 @@ import { db } from '../../firebase';
 import InspectorSidebar from '../../components/Inspector/InspectorSidebar';
 import InspectorLayout from '../../components/Inspector/InspectorLayout';
 
-const LABOR_DAY_RATE = 350000; // đơn giá theo ngày công
+const EXPERTISE_RATES: { [key: string]: number } = {
+    'Thợ hàn / cơ khí vỏ tàu': 600000,
+    'Thợ máy tàu': 800000,
+    'Thợ điện tàu': 650000,
+    'Thợ sơn / vệ sinh tàu': 450000,
+};
+
+const getExpertiseRate = (expertise: string): number => {
+    if (!expertise) return 350000; // default fallback
+    const normalized = expertise.trim().toLowerCase();
+    for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
+        if (key.toLowerCase() === normalized) return rate;
+    }
+    return 350000; // default fallback
+};
 
 const { Title } = Typography;
 
@@ -181,7 +195,7 @@ const OrderDetailDone: React.FC = () => {
     }, [orderData]);
 
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
-    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
+    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
 
     if (loading || !orderData) return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
 
@@ -283,16 +297,14 @@ const OrderDetailDone: React.FC = () => {
                         <Card size="small" title="Nhân công đề xuất" className="mt-4">
                             <Row gutter={8} className="mb-2 font-medium">
                                 <Col span={8}><div>Nhân viên</div></Col>
-                                <Col span={8}><div>Công việc</div></Col>
-                                <Col span={4}><div>Số ngày</div></Col>
-                                <Col span={4}><div>Chi phí</div></Col>
+                                    <Col span={8}><div>Số ngày</div></Col>
+                                    <Col span={8}><div>Chi phí</div></Col>
                             </Row>
                             {laborLines.map((line, idx) => (
                                 <Row key={line.id || idx} gutter={8} className="mb-2">
                                     <Col span={8}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
-                                    <Col span={8}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
-                                    <Col span={4}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
-                                    <Col span={4}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                        <Col span={8}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div></Col>
                                 </Row>
                             ))}
                             <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>

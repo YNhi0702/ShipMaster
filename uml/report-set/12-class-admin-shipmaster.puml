@@ -1,0 +1,42 @@
+@startuml
+scale 0.95
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam dpi 180
+left to right direction
+
+title Bieu do lop cho cac chuc nang lien quan den Quan tri
+
+class DirectorLayout {
+  - userName : string
+  + fetchDirectorInfo() : Promise<void>
+}
+
+class UserManagement {
+  - users : UserData[]
+  + fetchUsers() : Promise<void>
+  + handleChangePassword() : Promise<void>
+  + handleDelete(id) : Promise<void>
+}
+
+class WorkshopManagement {
+  - workshops : Workshop[]
+  - potentialOwners : UserOption[]
+  + fetchWorkshops() : Promise<void>
+  + handleOk() : Promise<void>
+}
+
+class AdminService {
+  + getUsers() : Promise<any[]>
+  + getWorkshops() : Promise<any[]>
+  + updateUser() : Promise<void>
+  + updateWorkshop() : Promise<void>
+}
+
+DirectorLayout ..> AdminService
+UserManagement ..> AdminService
+WorkshopManagement ..> AdminService
+
+@enduml

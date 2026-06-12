@@ -1,0 +1,44 @@
+@startuml
+scale 1.0
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam dpi 180
+top to bottom direction
+
+title Thiet ke chi tiet goi cua doi tuong Quan tri
+
+package "Presentation" {
+  class DirectorLayout
+  class UserManagementPage
+  class WorkshopManagementPage
+}
+
+package "Application" {
+  class AdminService
+}
+
+package "Data Access" {
+  interface UserRepository
+  interface WorkshopRepository
+  interface EmployeeRepository
+}
+
+package "Data" {
+  class User
+  class WorkShop
+  class Employee
+}
+
+DirectorLayout ..> AdminService
+UserManagementPage ..> AdminService
+WorkshopManagementPage ..> AdminService
+AdminService ..> UserRepository
+AdminService ..> WorkshopRepository
+AdminService ..> EmployeeRepository
+UserRepository ..> User
+WorkshopRepository ..> WorkShop
+EmployeeRepository ..> Employee
+
+@enduml

@@ -45,8 +45,8 @@ const CreateOrder: React.FC = () => {
                 const shipData = shipSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 // Lấy workshops
-                const workshopQuery = query(collection(db, 'workShop'), where('status', '==', 'còn trống'));
-                const workshopSnapshot = await getDocs(workshopQuery);
+                // Load all workshops from Firestore so the dropdown shows every workshop document
+                const workshopSnapshot = await getDocs(collection(db, 'workShop'));
                 const workshopData = workshopSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
                 setShips(shipData);

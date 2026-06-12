@@ -1,0 +1,37 @@
+@startuml
+scale 1.0
+skinparam defaultFontName Arial
+skinparam defaultFontSize 18
+skinparam shadowing false
+skinparam dpi 180
+top to bottom direction
+
+title Bieu do phu thuoc goi tong quan cua ShipMaster
+
+package "Presentation" {
+  rectangle "src/components" as components
+  rectangle "src/pages" as pages
+  rectangle "src/routes" as routes
+}
+
+package "Application" {
+  rectangle "firebase.ts" as firebase
+  rectangle "Cloud Functions" as functions
+}
+
+package "Data" {
+  rectangle "users / customers / employees" as data1
+  rectangle "ship / workShop / repairOrder" as data2
+  rectangle "material / invoice / payment" as data3
+}
+
+pages ..> components
+pages ..> routes
+pages ..> firebase
+routes ..> firebase
+functions ..> firebase
+firebase ..> data1
+firebase ..> data2
+firebase ..> data3
+
+@enduml

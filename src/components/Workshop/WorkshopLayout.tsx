@@ -22,6 +22,7 @@ const WorkshopLayout: React.FC<WorkshopLayoutProps> = ({ selectedKey = 'orders',
         if (k === 'orders') navigate('/workshop');
         else if (k === 'schedule') navigate('/workshop?tab=schedule');
         else if (k === 'employees') navigate('/workshop?tab=employees');
+        
         else if (k === 'inspected') navigate('/workshop?tab=inspected');
         else navigate('/workshop');
     };

@@ -55,3 +55,44 @@ exports.deleteUserAuth = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError('internal', 'Lỗi xóa Auth: ' + error.message);
     }
 });
+
+// Ensure customers documents have a unique referralCode
+const REF_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function randomCode(length = 8) {
+    let s = '';
+    for (let i = 0; i < length; i++) {
+        s += REF_CHARS.charAt(Math.floor(Math.random() * REF_CHARS.length));
+    }
+    return s;
+}
+
+async function generateUniqueReferral(adminDb, length = 8) {
+    let attempts = 0;
+    while (attempts < 1000) {
+        const code = randomCode(length);
+        const snap = await adminDb.collection('customers').where('referralCode', '==', code).limit(1).get();
+        if (snap.empty) return code;
+        attempts++;
+    }
+    throw new Error('Unable to generate unique referral code');
+}
+
+exports.ensureReferralCode = functions.firestore
+    .document('customers/{uid}')
+    .onWrite(async (change, context) => {
+        const after = change.after;
+        if (!after.exists) return null; // deleted
+
+        const data = after.data();
+        if (data && data.referralCode) return null; // already has
+
+        try {
+            const db = admin.firestore();
+            const code = await generateUniqueReferral(db, 8);
+            await after.ref.update({ referralCode: code });
+            console.log(`Assigned referralCode ${code} to ${context.params.uid}`);
+        } catch (err) {
+            console.error('Error assigning referralCode:', err);
+        }
+        return null;
+    });

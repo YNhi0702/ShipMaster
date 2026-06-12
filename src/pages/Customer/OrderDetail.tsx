@@ -50,6 +50,9 @@ const OrderDetail: React.FC = () => {
     const [userName, setUserName] = useState('');
     const [userAddress, setUserAddress] = useState('');
     const [userPhone, setUserPhone] = useState('');
+    const [referredByUid, setReferredByUid] = useState('');
+    const [referredByCode, setReferredByCode] = useState('');
+    const [isFirstOrder, setIsFirstOrder] = useState(true);
     
     const [loadingUser, setLoadingUser] = useState(true);
 
@@ -97,6 +100,21 @@ const OrderDetail: React.FC = () => {
                     setUserName(custData.fullName || 'Khách hàng');
                     setUserAddress(custData.address || ''); // Lấy địa chỉ
                     setUserPhone(custData.phoneNumber || custData.phone || ''); // Lấy số điện thoại
+                    setReferredByUid(custData.referredByUid || '');
+                    setReferredByCode(custData.referredByCode || '');
+
+                    // Check if this is the first order
+                    try {
+                        const completedOrdersQuery = query(
+                            collection(db, 'repairOrder'),
+                            where('uid', '==', uid),
+                            where('Status', '==', 'Hoàn thành')
+                        );
+                        const completedSnap = await getDocs(completedOrdersQuery);
+                        setIsFirstOrder(completedSnap.size === 0);
+                    } catch (e) {
+                        console.warn('Could not check completed orders:', e);
+                    }
                 }
             } catch {}
 
@@ -243,6 +261,11 @@ const OrderDetail: React.FC = () => {
 
     const { createdAt, Status, description } = orderData;
 
+    // Calculate discount for first order with referral
+    const shouldApplyDiscount = referredByUid && isFirstOrder && normalize(Status) === normalize('đã tạo hóa đơn');
+    const discountAmount = shouldApplyDiscount ? Math.round(savedTotalCost * 0.05) : 0;
+    const discountedTotalCost = savedTotalCost - discountAmount;
+
     const proposalText: string =
         orderData?.repairplan ||
         orderData?.proposal ||
@@ -378,7 +401,8 @@ const OrderDetail: React.FC = () => {
                     createdAt={createdAt}
                     materialsCost={savedMaterialsCost}
                     laborCost={savedLaborCost}
-                    totalCost={savedTotalCost}
+                    totalCost={discountedTotalCost}
+                    discount={discountAmount}
                     customerName={userName}
                     customerAddress={userAddress}
                     customerPhone={userPhone}

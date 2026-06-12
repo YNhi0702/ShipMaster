@@ -9,7 +9,21 @@ import InspectorLayout from '../../components/Inspector/InspectorLayout';
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { TextArea } = Input;
-const LABOR_DAY_RATE = 350000; // đơn giá ngày công cố định
+const EXPERTISE_RATES: { [key: string]: number } = {
+    'Thợ hàn / cơ khí vỏ tàu': 600000,
+    'Thợ máy tàu': 800000,
+    'Thợ điện tàu': 650000,
+    'Thợ sơn / vệ sinh tàu': 450000,
+};
+
+const getExpertiseRate = (expertise: string): number => {
+    if (!expertise) return 350000; // default fallback
+    const normalized = expertise.trim().toLowerCase();
+    for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
+        if (key.toLowerCase() === normalized) return rate;
+    }
+    return 350000; // default fallback
+};
 
 
 const ProposalInspector: React.FC = () => {
@@ -296,10 +310,9 @@ const ProposalInspector: React.FC = () => {
                         Employee_ID: l.employeeId || null,
                         EmployeeName: l.employeeName || '',
                         Expertise: l.expertise || '',
-                        Description: l.description || '',
                         Days: Number(l.days) || 0,
                         Quantity: Number(l.days) || 0, // giữ tương thích dữ liệu cũ
-                        UnitPrice: LABOR_DAY_RATE,
+                        UnitPrice: getExpertiseRate(l.expertise || ''),
                         createdAt: serverTimestamp(),
                     });
                 }
@@ -349,7 +362,7 @@ const ProposalInspector: React.FC = () => {
     const removeMaterialLine = (idx: number) => setMaterialLines(prev => prev.filter((_, i) => i !== idx));
 
     // Labor helpers
-    const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', description: '', days: 1, expertise: '' }]);
+    const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', days: 1, expertise: '' }]);
     const updateLaborLine = (idx: number, patch: any) => setLaborLines(prev => {
         const next = [...prev];
         next[idx] = { ...next[idx], ...patch };
@@ -359,10 +372,10 @@ const ProposalInspector: React.FC = () => {
 
     // Costs for draft (modal)
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
-    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
+    const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
     // Costs for saved (read-only)
     const savedMaterialsCost = savedMaterialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
-    const savedLaborCost = savedLaborLines.reduce((s, x) => s + (Number(x.days) || 0) * LABOR_DAY_RATE, 0);
+    const savedLaborCost = savedLaborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
 
     // handle saving materials will be part of handleSubmitProposal to combine actions
 
@@ -485,19 +498,19 @@ const ProposalInspector: React.FC = () => {
                         </Card>
                         <Card size="small" title="Nhân công đề xuất" className="mt-4">
                             <Row gutter={8} className="mb-2 font-medium">
-                                <Col span={7}><div>Nhân viên</div></Col>
+                                <Col span={10}><div>Nhân viên</div></Col>
                                 <Col span={6}><div>Chuyên môn</div></Col>
-                                <Col span={6}><div>Công việc</div></Col>
-                                <Col span={2}><div>Số ngày</div></Col>
+                                <Col span={4}><div>Số ngày</div></Col>
                                 <Col span={3}><div>Chi phí</div></Col>
+                                <Col span={1}></Col>
                             </Row>
                             {savedLaborLines.map((line, idx) => (
                                 <Row key={line.id || idx} gutter={8} className="mb-2">
-                                    <Col span={7}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
+                                    <Col span={10}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
                                     <Col span={6}><div style={{ paddingTop: 6 }}>{line.expertise || '-'}</div></Col>
-                                    <Col span={6}><div style={{ paddingTop: 6 }}>{line.description || '-'}</div></Col>
-                                    <Col span={2}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
-                                    <Col span={3}><div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div></Col>
+                                    <Col span={4}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                    <Col span={3}><div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div></Col>
+                                    <Col span={1}></Col>
                                 </Row>
                             ))}
                             <div className="text-right font-medium">Chi phí nhân công: {savedLaborCost.toLocaleString('vi-VN')} đ</div>
@@ -616,16 +629,15 @@ const ProposalInspector: React.FC = () => {
                                     <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
                                 </div>
                                 <Row gutter={8} className="mb-2 font-medium">
-                                    <Col span={7}><div>Nhân viên</div></Col>
+                                    <Col span={10}><div>Nhân viên</div></Col>
                                     <Col span={6}><div>Chuyên môn</div></Col>
-                                    <Col span={6}><div>Công việc</div></Col>
-                                    <Col span={2}><div>Số ngày</div></Col>
-                                    <Col span={2}><div>Chi phí</div></Col>
+                                    <Col span={4}><div>Số ngày</div></Col>
+                                    <Col span={3}><div>Chi phí</div></Col>
                                     <Col span={1}></Col>
                                 </Row>
                                 {laborLines.map((line, idx) => (
                                     <Row key={line.id} gutter={8} className="mb-2">
-                                        <Col span={7}>
+                                        <Col span={10}>
                                             <Select
                                                 showSearch
                                                 placeholder={loadingEmployees ? 'Đang tải...' : 'Chọn nhân viên'}
@@ -657,30 +669,13 @@ const ProposalInspector: React.FC = () => {
                                             />
                                         </Col>
                                         <Col span={6}>
-                                            <Input
-                                                placeholder="Chuyên môn"
-                                                value={line.expertise || ''}
-                                                disabled
-                                            />
+                                            <Input value={line.expertise || ''} disabled />
                                         </Col>
-                                        <Col span={6}>
-                                            <Form.Item
-                                                style={{ marginBottom: 0 }}
-                                                validateStatus={submitAttempted && !String(line.description || '').trim() ? 'error' : ''}
-                                                help={submitAttempted && !String(line.description || '').trim() ? 'Bắt buộc nhập công việc' : undefined}
-                                            >
-                                                <Input
-                                                    placeholder="Công việc (VD: sơn, hàn...)"
-                                                    value={line.description}
-                                                    onChange={(e) => updateLaborLine(idx, { description: e.target.value })}
-                                                />
-                                            </Form.Item>
-                                        </Col>
-                                        <Col span={2}>
+                                        <Col span={4}>
                                             <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
                                         </Col>
-                                        <Col span={2}>
-                                            <div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * LABOR_DAY_RATE).toLocaleString('vi-VN')} đ</div>
+                                        <Col span={3}>
+                                            <div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div>
                                         </Col>
                                         <Col span={1}>
                                             <Button danger size="small" onClick={() => removeLaborLine(idx)}>Xóa</Button>

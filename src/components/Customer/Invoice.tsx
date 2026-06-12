@@ -28,6 +28,7 @@ interface InvoiceProps {
     customerPhone?: string;
     items?: InvoiceItem[];
     invoiceId?: string;
+    discount?: number;
 }
 
 const formatMoney = (value: number) =>
@@ -54,7 +55,8 @@ const Invoice: React.FC<InvoiceProps> = ({
     customerAddress = '',
     customerPhone = '',
     items = [],
-    invoiceId = 'HD001'
+    invoiceId = 'HD001',
+    discount = 0
 }) => {
     const invoiceRef = useRef<HTMLDivElement>(null);
 
@@ -242,6 +244,12 @@ const Invoice: React.FC<InvoiceProps> = ({
 
                     </tbody>
                     <tfoot>
+                        {discount > 0 && (
+                            <tr>
+                                <td colSpan={5} className={`border ${borderColor} p-2 text-right font-bold ${textColor}`}>Giảm giá (5% đơn đầu):</td>
+                                <td className={`border ${borderColor} p-2 text-right font-bold text-green-600`}>-{formatMoney(discount)}</td>
+                            </tr>
+                        )}
                         <tr>
                             <td colSpan={5} className={`border ${borderColor} p-2 text-right font-bold ${textColor}`}>Tổng cộng tiền thanh toán (Total payment):</td>
                             <td className={`border ${borderColor} p-2 text-right font-bold text-red-600 text-lg`}>{formatMoney(totalCost)}</td>

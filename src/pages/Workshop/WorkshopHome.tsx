@@ -5,13 +5,14 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../../firebase';
 import WorkshopLayout from '../../components/Workshop/WorkshopLayout';
+import StaffManagement from './StaffManagement';
 
 const { Title } = Typography;
 
 const WorkshopHome: React.FC = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<any[]>([]);
-    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule'>('orders');
+    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule' | 'employees' | 'inspected' | 'proposal'>('orders');
     const [workshops, setWorkshops] = useState<Array<{ id: string; name: string }>>([]);
     const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
     const [orderSearch, setOrderSearch] = useState<string>('');
@@ -35,6 +36,9 @@ const WorkshopHome: React.FC = () => {
             const params = new URLSearchParams(location.search || '');
             const tab = params.get('tab');
             if (tab === 'schedule') setSelectedKey('schedule');
+            else if (tab === 'employees') setSelectedKey('employees');
+            else if (tab === 'inspected') setSelectedKey('inspected');
+            else if (tab === 'proposal') setSelectedKey('proposal');
             else setSelectedKey('orders');
         } catch (e) {
             // ignore
@@ -486,6 +490,12 @@ const WorkshopHome: React.FC = () => {
                     className="shadow-sm"
                     scroll={{ x: 'max-content' }}
                 />
+            </div>
+        )}
+
+        {selectedKey === 'employees' && (
+            <div>
+                <StaffManagement />
             </div>
         )}
 

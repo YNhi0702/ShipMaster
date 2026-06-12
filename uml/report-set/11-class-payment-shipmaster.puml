@@ -1,0 +1,48 @@
+@startuml
+scale 0.95
+skinparam defaultFontName Arial
+skinparam defaultFontSize 16
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam dpi 180
+left to right direction
+
+title Bieu do lop cho cac chuc nang lien quan den Thanh toan
+
+class AccountHome {
+  - orders : any[]
+  - selectedOrder : any
+  + fetchOrders() : Promise<void>
+  + createInvoice() : Promise<void>
+}
+
+class PaymentList {
+  - orders : PaymentRow[]
+  - paymentHistory : PaymentHistoryRow[]
+  + fetchPaymentOrders() : Promise<void>
+  + submitPayment() : Promise<void>
+}
+
+class StatisticsPage {
+  - statistics : object
+  - chartData : any[]
+  + fetchStatistics() : Promise<void>
+}
+
+class Invoice {
+  - totalCost : number
+  + handleDownloadPDF() : Promise<void>
+}
+
+class PaymentService {
+  + getInvoices() : Promise<any[]>
+  + getPayments() : Promise<any[]>
+  + createPayment() : Promise<void>
+}
+
+AccountHome ..> PaymentService
+PaymentList ..> PaymentService
+StatisticsPage ..> PaymentService
+Invoice ..> PaymentService
+
+@enduml
