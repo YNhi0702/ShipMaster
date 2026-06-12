@@ -5,12 +5,12 @@ import {
 } from 'antd';
 import { UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { db, storage } from '../../firebase';
+import { storage } from '../../firebase';
 import CustomerLayout from '../../components/Customer/CustomerLayout';
-import {
-    collection, query, where, getDocs,
-    addDoc, Timestamp
-} from 'firebase/firestore';
+import { authService } from '../../services/authService';
+import { shipService } from '../../services/shipService';
+import { workshopService } from '../../services/workshopService';
+import { orderService } from '../../services/orderService';
 import {
     ref, uploadBytes, getDownloadURL
 } from 'firebase/storage';
@@ -40,14 +40,10 @@ const CreateOrder: React.FC = () => {
 
             try {
                 // Lấy ships của user
-                const shipQuery = query(collection(db, 'ship'), where('uid', '==', uid));
-                const shipSnapshot = await getDocs(shipQuery);
-                const shipData = shipSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const shipData = await shipService.getUserShips(uid);
 
                 // Lấy workshops
-                // Load all workshops from Firestore so the dropdown shows every workshop document
-                const workshopSnapshot = await getDocs(collection(db, 'workShop'));
-                const workshopData = workshopSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const workshopData = await workshopService.getAllWorkshops();
 
                 setShips(shipData);
                 setWorkshops(workshopData);
@@ -88,7 +84,7 @@ const CreateOrder: React.FC = () => {
             if (!shipId) {
                 try {
                     console.log("Tạo ship");
-                    const shipDoc = await addDoc(collection(db, 'ship'), {
+                    shipId = await shipService.createShip({
                         name: values.name,
                         registration_number: values.registration_number,
                         registered_port: values.registered_port,
@@ -102,27 +98,19 @@ const CreateOrder: React.FC = () => {
                         auxiliary_engines_count: Number(values.auxiliary_engines_count),
                         uid,
                     });
-                    console.log("Tạo ship thành công:", shipDoc.id);
-                    shipId = shipDoc.id;
+                    console.log("Tạo ship thành công:", shipId);
                 } catch (e) {
                     console.error("Lỗi khi tạo ship:", e);
                 }
 
             }
 
-            await addDoc(collection(db, 'repairOrder'), {
-                StartDate: Timestamp.now(),
-                Status: 'Chờ giám định',
+            await orderService.createRepairOrder({
+                uid: uid,
+                shipId: shipId || '',
+                workshopId: values.workshopId,
                 description: values.description,
                 imageList: imageUrls,
-                inspectorId: '',
-                invoiceId: '',
-                shipId: shipId,
-                totalCostId: 0,
-                totalCost: 0,
-                uid: uid,
-                workshopId: values.workshopId,
-                repairplan: '',
             });
 
             message.success('Tạo đơn sửa chữa thành công!');
@@ -149,9 +137,8 @@ const CreateOrder: React.FC = () => {
             try {
                 const uid = sessionStorage.getItem('uid');
                 if (!uid) return;
-                const customersRef = query(collection(db, 'customers'), where('uid', '==', uid));
-                const snap = await getDocs(customersRef);
-                if (!snap.empty) setCustomerName(snap.docs[0].data().fullName || 'Khách hàng');
+                const profile = await authService.getCustomerProfile(uid);
+                if (profile) setCustomerName(profile.fullName);
             } finally {
                 setLoadingUser(false);
             }

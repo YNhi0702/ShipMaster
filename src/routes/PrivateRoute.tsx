@@ -1,7 +1,7 @@
 import React, { ReactNode, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import { authService } from '../services/authService';
+
 
 interface PrivateRouteProps {
     children: ReactNode;
@@ -37,8 +37,7 @@ const PrivateRoute: React.FC<PrivateRouteProps> = ({ children, allowedRoles }) =
             }
 
             try {
-                const userDoc = await getDoc(doc(db, 'users', uid));
-                const roleFromDb = userDoc.exists() ? userDoc.data().role : null;
+                const roleFromDb = await authService.getUserRole(uid);
 
                 if (roleFromDb) {
                     sessionStorage.setItem('role', roleFromDb);

@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { Form, Input, Button, message } from 'antd';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from '../../firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { authService } from '../../services/authService';
 import { useNavigate } from 'react-router-dom';
 
 interface LoginFormValues {
@@ -19,23 +17,19 @@ const Login: React.FC = () => {
         try {
             setLoading(true);
 
-            // Login Firebase Auth
-            const userCredential = await signInWithEmailAndPassword(auth, values.email, values.password);
-            const user = userCredential.user;
+            // Login Firebase Auth via service
+            const user = await authService.login(values.email, values.password);
 
             sessionStorage.setItem('uid', user.uid);
 
-            // Fetch Firestore
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            // Fetch role via service
+            const role = await authService.getUserRole(user.uid);
 
-            if (!userDoc.exists()) {
+            if (!role) {
                 messageApi.error("Tài khoản chưa được cấu hình trong hệ thống!");
                 setLoading(false);
                 return;
             }
-
-            const data = userDoc.data();
-            const role = data.role;
 
             // Lưu role vào session
             sessionStorage.setItem("role", role);

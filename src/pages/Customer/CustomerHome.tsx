@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Layout, Button, Table, Typography, message, Card, Space, Tag } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { authService } from '../../services/authService';
+import { orderService } from '../../services/orderService';
 import CustomerLayout from '../../components/Customer/CustomerLayout';
 
 const { Header, Content } = Layout;
@@ -27,64 +27,14 @@ const CustomerHome: React.FC = () => {
 
             try {
                 // Lấy thông tin khách hàng
-                const customersRef = collection(db, 'customers');
-                const customerQuery = query(customersRef, where('uid', '==', uid));
-                const customerSnapshot = await getDocs(customerQuery);
-                if (!customerSnapshot.empty) {
-                    const customerData = customerSnapshot.docs[0].data();
-                    setUserName(customerData.fullName || 'Khách hàng');
-                    setMyReferralCode(customerData.myreferralCode || '');
+                const profile = await authService.getCustomerProfile(uid);
+                if (profile) {
+                    setUserName(profile.fullName);
+                    setMyReferralCode(profile.myreferralCode);
                 }
 
                 // Lấy danh sách đơn sửa chữa
-                const ordersRef = collection(db, 'repairOrder');
-                const ordersQuery = query(ordersRef, where('uid', '==', uid));
-                const ordersSnapshot = await getDocs(ordersQuery);
-
-                const ordersData = await Promise.all(
-                    ordersSnapshot.docs.map(async (docSnap) => {
-                        const order = docSnap.data();
-                        const createdAt = order.StartDate?.toDate().toLocaleDateString('vi-VN');
-                        let shipName = 'Không xác định';
-                        let workshopName = 'Không xác định';
-
-                        try {
-                            if (order.shipId) {
-                                const shipSnap = await getDoc(doc(db, 'ship', order.shipId));
-                                if (shipSnap.exists()) {
-                                    shipName = shipSnap.data().name || shipName;
-                                }
-                            }
-                        } catch (err) {
-                            console.warn('Không thể lấy tên tàu:', order.shipId);
-                        }
-
-                        try {
-                            if (order.workshopId) {
-                                const workshopSnap = await getDoc(doc(db, 'workShop', order.workshopId));
-                                if (workshopSnap.exists()) {
-                                    workshopName = workshopSnap.data().name || workshopName;
-                                }
-                            }
-                        } catch (err) {
-                            console.warn('Không thể lấy tên xưởng:', order.workshopId);
-                        }
-
-                        const totalCost = Number(order.totalCost || order.TotalCost || order.totalPrice || order.TotalPrice || 0);
-                        const rawStatus = order.Status || order.status || order.currentStatus || '';
-
-                        return {
-                            id: docSnap.id,
-                            ...order,
-                            createdAt,
-                            shipName,
-                            workshopName,
-                            totalCost,
-                            rawStatus,
-                        };
-                    })
-                );
-
+                const ordersData = await orderService.getCustomerOrders(uid);
                 setOrders(ordersData);
             } catch (error) {
                 console.error('Lỗi khi tải dữ liệu:', error);

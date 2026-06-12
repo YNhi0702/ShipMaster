@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Col, Row, Statistic, Typography, message, Spin } from 'antd';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { invoiceService } from '../../services/invoiceService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import moment from 'moment';
-import 'moment/locale/vi';
 
 const { Title } = Typography;
 
 const StatisticsPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
-    moment.locale('vi');
 
     const [statistics, setStatistics] = useState({
         totalInvoices: 0,
@@ -26,90 +23,13 @@ const StatisticsPage: React.FC = () => {
     const fetchStatistics = async () => {
         try {
             setLoading(true);
-            const invoiceSnap = await getDocs(collection(db, "invoice"));
-            const invoices = invoiceSnap.docs.map(doc => doc.data());
+            const [stats, chart] = await Promise.all([
+                invoiceService.getAccountingStatistics(),
+                invoiceService.getMonthlyChartData()
+            ]);
 
-            const paymentSnap = await getDocs(collection(db, "payment"));
-            const payments = paymentSnap.docs.map(doc => doc.data());
-
-            let totalCollected = 0;
-            payments.forEach(p => {
-                totalCollected += p.Amount || 0;
-            });
-
-            let totalDebt = 0;
-            invoices.forEach(inv => {
-                totalDebt += inv.RemainingAmount || 0;
-            });
-
-            let paid = 0;
-            let partial = 0;
-            let unpaid = 0;
-
-            invoices.forEach(inv => {
-                const status = inv.PaymentStatus;
-                if (status === "Đã thanh toán") paid++;
-                else if (status === "Thanh toán một phần") partial++;
-                else if (status === "Chưa thanh toán") unpaid++;
-            });
-
-            setStatistics({
-                totalInvoices: invoices.length,
-                totalPaid: paid,
-                totalPartial: partial,
-                totalUnpaid: unpaid,
-                totalCollected,
-                totalDebt,
-            });
-            // 3. XỬ LÝ DỮ LIỆU BIỂU ĐỒ (THEO NGÀY TRONG THÁNG HIỆN TẠI)            
-            const currentMonth = moment();
-            const startOfMonth = currentMonth.clone().startOf('month');
-            const endOfMonth = currentMonth.clone().endOf('month');
-
-            // Khởi tạo khung dữ liệu cho tất cả các ngày trong tháng (chỉ đến hiện tại)
-            const dailyStats: { [key: string]: { date: string; collected: number } } = {};
-            // Thay vì loop đến endOfMonth, ta chỉ loop đến currentMonth (hôm nay)
-            for (let d = startOfMonth.clone(); d.isSameOrBefore(currentMonth, 'day'); d.add(1, 'day')) {
-                const key = d.format('YYYY-MM-DD');
-                dailyStats[key] = { date: key, collected: 0 };
-            }
-
-            // Tính tiền đã thu (chỉ trong tháng hiện tại) - DOANH THU
-            payments.forEach(p => {
-                let pDate;
-                if (p.PaymentDate?.toDate) {
-                    pDate = p.PaymentDate.toDate();
-                } else if (typeof p.PaymentDate === 'string') {
-                    pDate = new Date(p.PaymentDate);
-                } else {
-                    pDate = new Date(); 
-                }
-                
-                const mDate = moment(pDate);
-                if (mDate.isSame(currentMonth, 'month') && mDate.isSame(currentMonth, 'year')) {
-                    const key = mDate.format('YYYY-MM-DD');
-                    if (dailyStats[key]) {
-                        dailyStats[key].collected += (p.Amount || 0);
-                    }
-                }
-            });
-
-            // Convert object to array và sort theo ngày
-            const chartArray = Object.values(dailyStats).sort((a, b) => a.date.localeCompare(b.date));
-
-            // Cập nhật: Tính lũy kế (Cumulative) từ đầu tháng
-            let runningCollected = 0;
-
-            const cumulativeChartData = chartArray.map(item => {
-                runningCollected += item.collected;
-                
-                return {
-                    ...item,
-                    collected: runningCollected, 
-                };
-            });
-
-            setChartData(cumulativeChartData);
+            setStatistics(stats);
+            setChartData(chart);
 
         } catch (error) {
             console.error(error);
