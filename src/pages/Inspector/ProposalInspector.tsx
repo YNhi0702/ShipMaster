@@ -19,10 +19,26 @@ const EXPERTISE_RATES: { [key: string]: number } = {
 const getExpertiseRate = (expertise: string): number => {
     if (!expertise) return 350000; // default fallback
     const normalized = expertise.trim().toLowerCase();
+    
+    // Tách chuyên môn và bậc năng lực (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
+    const parts = normalized.split(' - ');
+    const baseExp = parts[0] ? parts[0].trim() : '';
+    const levelStr = parts[1] ? parts[1].trim() : '';
+
+    let baseRate = 350000; // default fallback
     for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
-        if (key.toLowerCase() === normalized) return rate;
+        if (key.toLowerCase() === baseExp) {
+            baseRate = rate;
+            break;
+        }
     }
-    return 350000; // default fallback
+
+    if (levelStr === 'bậc 1') {
+        return baseRate * 0.8;
+    } else if (levelStr === 'bậc 3') {
+        return baseRate * 1.25;
+    }
+    return baseRate; // mặc định Bậc 2
 };
 
 

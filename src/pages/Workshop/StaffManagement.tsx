@@ -11,10 +11,12 @@ interface StaffRecord {
     fullName?: string; // display name (UserName)
     phone?: string;
     email?: string;
-    expertise?: string; // Expertise field in employees
+    expertise?: string; // Base Expertise field
+    level?: string;     // Level field parsed from Expertise
     roleId?: any; // Role_ID
     workShopID?: string; // workShopID field in employees
     createdAt?: any;
+    rawExpertise?: string; // original Expertise string
 }
 
 interface Workshop {
@@ -39,15 +41,22 @@ const StaffManagement: React.FC = () => {
             const snap = await getDocs(collection(db, 'employees'));
             const rows = snap.docs.map((d) => {
                 const data = d.data() as any;
+                const rawExp = data.Expertise || data.expertise || '';
+                const parts = rawExp.split(' - ');
+                const baseExp = parts[0] ? parts[0].trim() : '';
+                const lvl = parts[1] ? parts[1].trim() : 'Bậc 2';
+
                 return {
                     id: d.id,
                     fullName: data.UserName || data.fullName || data.name || '',
                     phone: data.Phone || data.phone || data.mobile || data.PhoneNumber || '',
                     email: data.Email || data.email || '',
-                    expertise: data.Expertise || data.expertise || '',
+                    expertise: baseExp,
+                    level: lvl,
                     roleId: (data.Role_ID ?? data.roleId ?? data.Role) || null,
                     workShopID: data.workShopID || data.workShopId || data.workshopId || data.workshop || null,
                     createdAt: data.createdAt || data.created_at || null,
+                    rawExpertise: rawExp,
                     raw: data,
                 } as StaffRecord;
             });
@@ -81,6 +90,7 @@ const StaffManagement: React.FC = () => {
     const openAdd = () => {
         setEditing(null);
         form.resetFields();
+        form.setFieldsValue({ level: 'Bậc 2' });
         setModalOpen(true);
     };
 
@@ -91,6 +101,7 @@ const StaffManagement: React.FC = () => {
             phone: record.phone,
             email: record.email,
             expertise: record.expertise,
+            level: record.level || 'Bậc 2',
             workshopSelect: record.workShopID,
         });
         setModalOpen(true);
@@ -112,13 +123,15 @@ const StaffManagement: React.FC = () => {
         try {
             const values = await form.validateFields();
             setSaving(true);
+            const finalExpertise = `${values.expertise} - ${values.level || 'Bậc 2'}`;
+
             if (editing && editing.id) {
                 const ref = doc(db, 'employees', editing.id);
                 await updateDoc(ref, {
                     UserName: values.fullName || '',
                     Phone: values.phone || '',
                     Email: values.email || '',
-                    Expertise: values.expertise || '',
+                    Expertise: finalExpertise,
                     Role_ID: 5,
                     workShopID: values.workshopSelect || null,
                     updatedAt: serverTimestamp(),
@@ -129,7 +142,7 @@ const StaffManagement: React.FC = () => {
                     UserName: values.fullName || '',
                     Phone: values.phone || '',
                     Email: values.email || '',
-                    Expertise: values.expertise || '',
+                    Expertise: finalExpertise,
                     Role_ID: 5,
                     workShopID: values.workshopSelect || null,
                     createdAt: serverTimestamp(),
@@ -154,6 +167,35 @@ const StaffManagement: React.FC = () => {
         { title: 'Số điện thoại', dataIndex: 'phone', key: 'phone' },
         { title: 'Email', dataIndex: 'email', key: 'email' },
         { title: 'Chuyên môn', dataIndex: 'expertise', key: 'expertise' },
+        {
+            title: 'Năng lực / Bậc',
+            key: 'level',
+            render: (_: any, record: StaffRecord) => (
+                <Select
+                    value={record.level || 'Bậc 2'}
+                    style={{ width: 110 }}
+                    onChange={async (newLevel) => {
+                        try {
+                            const ref = doc(db, 'employees', record.id!);
+                            const newExpString = `${record.expertise} - ${newLevel}`;
+                            await updateDoc(ref, {
+                                Expertise: newExpString,
+                                updatedAt: serverTimestamp(),
+                            });
+                            message.success(`Đã cập nhật ${record.fullName} lên ${newLevel}`);
+                            fetchStaff();
+                        } catch (e) {
+                            console.error('Failed to quick update level', e);
+                            message.error('Không thể cập nhật bậc.');
+                        }
+                    }}
+                >
+                    <Option value="Bậc 1">Bậc 1</Option>
+                    <Option value="Bậc 2">Bậc 2</Option>
+                    <Option value="Bậc 3">Bậc 3</Option>
+                </Select>
+            ),
+        },
         {
             title: 'Hành động',
             key: 'actions',
@@ -229,14 +271,23 @@ const StaffManagement: React.FC = () => {
                     <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'Email không hợp lệ' }]}>
                         <Input />
                     </Form.Item>
-                    <Form.Item name="expertise" label="Chuyên môn" rules={[{ required: true, message: 'Chọn chuyên môn' }]}>
-                        <Select placeholder="Chọn chuyên môn">
-                            <Option value="Thợ hàn / cơ khí vỏ tàu">Thợ hàn / cơ khí vỏ tàu</Option>
-                            <Option value="Thợ máy tàu">Thợ máy tàu</Option>
-                            <Option value="Thợ điện tàu">Thợ điện tàu</Option>
-                            <Option value="Thợ sơn / vệ sinh tàu">Thợ sơn / vệ sinh tàu</Option>
-                        </Select>
-                    </Form.Item>
+                    <div style={{ display: 'flex', gap: 16 }}>
+                        <Form.Item name="expertise" label="Chuyên môn" rules={[{ required: true, message: 'Chọn chuyên môn' }]} style={{ flex: 1 }}>
+                            <Select placeholder="Chọn chuyên môn">
+                                <Option value="Thợ hàn / cơ khí vỏ tàu">Thợ hàn / cơ khí vỏ tàu</Option>
+                                <Option value="Thợ máy tàu">Thợ máy tàu</Option>
+                                <Option value="Thợ điện tàu">Thợ điện tàu</Option>
+                                <Option value="Thợ sơn / vệ sinh tàu">Thợ sơn / vệ sinh tàu</Option>
+                            </Select>
+                        </Form.Item>
+                        <Form.Item name="level" label="Năng lực (Bậc)" rules={[{ required: true, message: 'Chọn năng lực' }]} style={{ width: 150 }}>
+                            <Select placeholder="Chọn bậc">
+                                <Option value="Bậc 1">Bậc 1 (Mới / Phụ)</Option>
+                                <Option value="Bậc 2">Bậc 2 (Thợ chính)</Option>
+                                <Option value="Bậc 3">Bậc 3 (Thợ cả)</Option>
+                            </Select>
+                        </Form.Item>
+                    </div>
                     <Form.Item name="workshopSelect" label="Xưởng" rules={[{ required: true, message: 'Chọn xưởng' }]}>
                         <Select placeholder="Chọn xưởng">
                             {workshops.map((ws) => (
