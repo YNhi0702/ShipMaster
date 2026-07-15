@@ -1,27 +1,28 @@
+// src/pages/Auth/Register.tsx
+// Component này xử lý đăng ký tài khoản Khách hàng (customer) mới, hỗ trợ kiểm tra số điện thoại duy nhất.
 import React, { useState } from 'react';
 import { Form, Input, Button, message } from 'antd';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../../firebase';
 
+// Định nghĩa kiểu dữ liệu cho form đăng ký
 interface RegisterFormValues {
     email: string;
     password: string;
     fullName: string;
     phone: string;
-    referralCode?: string;
 }
 
 const Register: React.FC = () => {
-    const [loading, setLoading] = useState(false);
-    const [messageApi, contextHolder] = message.useMessage();
+    const [loading, setLoading] = useState(false); // Trạng thái chờ xử lý khi submit form
+    const [messageApi, contextHolder] = message.useMessage(); // Sử dụng api thông báo của Ant Design
 
+    // Hàm xử lý chính khi người dùng nhấn nút Đăng ký và form hợp lệ
     const onFinish = async (values: RegisterFormValues) => {
         setLoading(true);
         try {
-            const enteredReferralCode = values.referralCode?.trim().toUpperCase() || '';
-
-            // Kiểm tra số điện thoại tồn tại
+            // 1. Kiểm tra xem số điện thoại đã được đăng ký bởi tài khoản nào khác trong hệ thống chưa
             const q = query(collection(db, "users"), where("phone", "==", values.phone));
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
@@ -30,75 +31,30 @@ const Register: React.FC = () => {
                 return;
             }
 
-            let referredByUid = '';
-            let referredByCode = '';
-
-            if (enteredReferralCode) {
-                const referralQuery = query(
-                    collection(db, 'customers'),
-                    where('myreferralCode', '==', enteredReferralCode)
-                );
-                const referralSnapshot = await getDocs(referralQuery);
-
-                if (referralSnapshot.empty) {
-                    messageApi.error('Mã giới thiệu không tồn tại trong hệ thống!');
-                    setLoading(false);
-                    return;
-                }
-
-                const referralData = referralSnapshot.docs[0].data() as any;
-                referredByUid = referralData.uid || '';
-                referredByCode = enteredReferralCode;
-            }
-
-            // Tạo user bằng email/password
+            // 2. Gọi Firebase Auth để tạo tài khoản mới với email và password
             const userCredential = await createUserWithEmailAndPassword(auth, values.email, values.password);
             const user = userCredential.user;
 
-            // Tạo mã giới thiệu ngẫu nhiên và đảm bảo không trùng
-            const generateReferralCode = (len = 6) => {
-                const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-                let out = '';
-                for (let i = 0; i < len; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
-                return out;
-            };
-
-            let myreferralCode = '';
-            for (;;) {
-                const candidate = generateReferralCode(6);
-                const qCode = query(collection(db, 'customers'), where('myreferralCode', '==', candidate));
-                const snap = await getDocs(qCode);
-                if (snap.empty) {
-                    myreferralCode = candidate;
-                    break;
-                }
-            }
-
-            // Lưu dữ liệu user vào collection users
+            // 3. Lưu thông tin tài khoản cơ bản và phân quyền vào collection 'users'
             await setDoc(doc(db, 'users', user.uid), {
                 uid: user.uid,
                 email: values.email,
                 phone: values.phone,
                 fullName: values.fullName,
-                role: 'customer',
-                myreferralCode,
-                referredByUid,
-                referredByCode,
+                role: 'customer',           // Mặc định đăng ký qua giao diện này là Khách hàng (customer)
             });
 
-            // Lưu dữ liệu chi tiết khách hàng vào collection customers
+            // 4. Lưu thông tin hồ sơ chi tiết vào collection 'customers' để quản lý thông tin khách hàng
             await setDoc(doc(db, 'customers', user.uid), {
                 uid: user.uid,
                 fullName: values.fullName,
                 phone: values.phone,
                 email: values.email,
-                myreferralCode,
-                referredByUid,
-                referredByCode,
             });
 
             messageApi.success('Đăng ký thành công!');
         } catch (error: any) {
+             // Bắt và xử lý các lỗi thường gặp từ Firebase Auth
              if (error.code === 'auth/email-already-in-use') {
                  messageApi.error("Email đã tồn tại trong hệ thống!");
              } else if (error.code === 'auth/invalid-email') {
@@ -138,14 +94,6 @@ const Register: React.FC = () => {
                 </Form.Item>
 
                 <Form.Item
-                    label="Mã giới thiệu"
-                    name="referralCode"
-                    extra="Nhập mã giới thiệu của khách hàng khác nếu bạn được giới thiệu."
-                >
-                    <Input placeholder="Ví dụ: ABC123" />
-                </Form.Item>
-
-                <Form.Item
                     label="Email"
                     name="email"
                     rules={[
@@ -171,7 +119,7 @@ const Register: React.FC = () => {
                 </Form.Item>
             </Form>
         </div>
-            );
-            };
+    );
+};
 
 export default Register;

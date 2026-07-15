@@ -7,6 +7,8 @@ import { db, auth } from '../../firebase';
 import WorkshopLayout from '../../components/Workshop/WorkshopLayout';
 
 const { Title } = Typography;
+
+// Bảng giá nhân công cơ bản theo chuyên môn
 const EXPERTISE_RATES: { [key: string]: number } = {
     'Thợ hàn / cơ khí vỏ tàu': 600000,
     'Thợ máy tàu': 800000,
@@ -14,16 +16,19 @@ const EXPERTISE_RATES: { [key: string]: number } = {
     'Thợ sơn / vệ sinh tàu': 450000,
 };
 
+/**
+ * Hàm tính toán đơn giá nhân công dựa vào tay nghề chuyên môn của thợ
+ */
 const getExpertiseRate = (expertise: string): number => {
-    if (!expertise) return 350000; // default fallback
+    if (!expertise) return 350000;
     const normalized = expertise.trim().toLowerCase();
     
-    // Tách chuyên môn và bậc năng lực (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
+    // Tách chuỗi chuyên môn và bậc tay nghề (VD: "Thợ điện tàu - Bậc 3")
     const parts = normalized.split(' - ');
     const baseExp = parts[0] ? parts[0].trim() : '';
     const levelStr = parts[1] ? parts[1].trim() : '';
 
-    let baseRate = 350000; // default fallback
+    let baseRate = 350000;
     for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
         if (key.toLowerCase() === baseExp) {
             baseRate = rate;
@@ -36,28 +41,29 @@ const getExpertiseRate = (expertise: string): number => {
     } else if (levelStr === 'bậc 3') {
         return baseRate * 1.25;
     }
-    return baseRate; // mặc định Bậc 2
+    return baseRate;
 };
 
 const OrderInfo: React.FC = () => {
-    const { id } = useParams();
+    const { id } = useParams(); // Lấy ID của đơn sửa chữa trên URL
     const location = useLocation();
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(true);
-    const [order, setOrder] = useState<any | null>(null);
-    const [ship, setShip] = useState<any | null>(null);
-    const [customer, setCustomer] = useState<any | null>(null);
-    const [workshopName, setWorkshopName] = useState<string | null>(null);
-    const [headerName, setHeaderName] = useState<string>('');
-    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
-    const [materialLines, setMaterialLines] = useState<any[]>([]);
-    const [laborLines, setLaborLines] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true); // Trạng thái tải dữ liệu
+    const [order, setOrder] = useState<any | null>(null); // Lưu thông tin đơn sửa chữa
+    const [ship, setShip] = useState<any | null>(null); // Lưu thông tin tàu của đơn
+    const [customer, setCustomer] = useState<any | null>(null); // Lưu thông tin khách hàng sở hữu đơn
+    const [workshopName, setWorkshopName] = useState<string | null>(null); // Lưu tên xưởng sửa chữa tiếp nhận
+    const [headerName, setHeaderName] = useState<string>(''); // Tên chủ xưởng hiển thị ở Header
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]); // Danh mục mẫu vật tư
+    const [materialLines, setMaterialLines] = useState<any[]>([]); // Dòng vật tư đã gán
+    const [laborLines, setLaborLines] = useState<any[]>([]); // Dòng nhân công đã gán
 
+    // Hàm tải dữ liệu chi tiết tổng hợp
     useEffect(() => {
         const load = async () => {
             try {
                 setLoading(true);
-                // If parent passed state, prefer it (faster UI), but still try to fetch fresh
+                // Ưu tiên nạp dữ liệu truyền nhanh từ Router State để tăng tốc độ phản hồi UI
                 let orderData = (location.state as any) || null;
                 if (!orderData && id) {
                     const oSnap = await getDoc(doc(db, 'repairOrder', id));
@@ -70,53 +76,38 @@ const OrderInfo: React.FC = () => {
                 }
                 setOrder({ id, ...orderData });
 
-                // load ship if present
+                // 1. Tải thông tin chi tiết Tàu sửa chữa của đơn
                 try {
                     const shipId = orderData?.shipId;
                     if (shipId) {
                         const sSnap = await getDoc(doc(db, 'ship', shipId));
                         if (sSnap.exists()) setShip(sSnap.data());
                     }
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* Bỏ qua */ }
 
-                // load customer / creator: try several collections (users, customers) and fallback to email lookup
+                // 2. Tải thông tin tài khoản Khách hàng thông qua khóa ngoại 'uid'
                 try {
-                    const candidateIds = [
-                        orderData?.createdBy,
-                        orderData?.userId,
-                        orderData?.customerId,
-                        orderData?.uid,
-                        orderData?.creatorId,
-                        orderData?.owner,
-                    ];
+                    const cid = orderData?.uid;
                     let cust: any = null;
-                    for (const cid of candidateIds) {
-                        if (!cid) continue;
-                        // try users collection
+                    if (cid) {
                         try {
                             const uSnap = await getDoc(doc(db, 'users', cid));
                             if (uSnap.exists()) {
                                 cust = uSnap.data();
-                                break;
                             }
-                        } catch (e) {
-                            // ignore
-                        }
-                        // try customers collection (some projects store customers separately)
-                        try {
-                            const cSnap = await getDoc(doc(db, 'customers', cid));
-                            if (cSnap.exists()) {
-                                cust = cSnap.data();
-                                break;
-                            }
-                        } catch (e) {
-                            // ignore
+                        } catch (e) { /* Bỏ qua */ }
+                        
+                        if (!cust) {
+                            try {
+                                const cSnap = await getDoc(doc(db, 'customers', cid));
+                                if (cSnap.exists()) {
+                                    cust = cSnap.data();
+                                }
+                            } catch (e) { /* Bỏ qua */ }
                         }
                     }
 
-                    // fallback: try to find by email in customers collection
+                    // Dự phòng nếu không tìm thấy bằng ID, truy vấn dựa theo email
                     if (!cust && orderData?.email) {
                         try {
                             const q = query(collection(db, 'customers'), where('email', '==', orderData.email));
@@ -124,34 +115,28 @@ const OrderInfo: React.FC = () => {
                             if (!snaps.empty) {
                                 cust = snaps.docs[0].data();
                             }
-                        } catch (e) {
-                            // ignore
-                        }
+                        } catch (e) { /* Bỏ qua */ }
                     }
 
-                    // final fallback: try users collection by email
                     if (!cust && orderData?.email) {
                         try {
                             const q2 = query(collection(db, 'users'), where('Email', '==', orderData.email));
                             const snaps2 = await getDocs(q2);
                             if (!snaps2.empty) cust = snaps2.docs[0].data();
-                        } catch (e) {
-                            // ignore
-                        }
+                        } catch (e) { /* Bỏ qua */ }
                     }
 
                     setCustomer(cust);
-                    // set headerName from the order's creator (customer) if available
+                    
+                    // Xác định tên hiển thị trên header (Tên chủ xưởng đang đăng nhập)
                     let creatorName = cust?.fullName || cust?.UserName || cust?.name || orderData?.createdByName || orderData?.createdBy || '';
 
-                    // If header is still empty, resolve current signed-in workshop user's name (like WorkshopHome)
                     if (!creatorName) {
                         try {
                             const uid = auth?.currentUser?.uid;
                             let resolvedName: string | null = null;
 
                             if (uid) {
-                                // users collection
                                 try {
                                     const userSnap = await getDoc(doc(db, 'users', uid));
                                     if (userSnap.exists()) {
@@ -161,7 +146,6 @@ const OrderInfo: React.FC = () => {
                                 } catch {}
                             }
 
-                            // fallback by email from employees
                             if (!resolvedName) {
                                 const email = auth?.currentUser?.email;
                                 if (email) {
@@ -176,7 +160,6 @@ const OrderInfo: React.FC = () => {
                                 }
                             }
 
-                            // try workShop doc id == uid
                             if (!resolvedName && auth?.currentUser?.uid) {
                                 try {
                                     const wsDoc = await getDoc(doc(db, 'workShop', auth.currentUser.uid));
@@ -190,36 +173,24 @@ const OrderInfo: React.FC = () => {
                     }
 
                     setHeaderName(creatorName || '');
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* Bỏ qua */ }
 
-                // load workshop name if embedded or referenced
+                // 3. Tải thông tin xưởng
                 try {
                     if (orderData?.workshopId) {
                         const wSnap = await getDoc(doc(db, 'workShop', orderData.workshopId));
                         if (wSnap.exists()) setWorkshopName(wSnap.data().name || null);
-                    } else if (orderData?.workshop) {
-                        // if workshop stored as string id or object
-                        const w = orderData.workshop;
-                        if (typeof w === 'string') {
-                            const wSnap = await getDoc(doc(db, 'workShop', w));
-                            if (wSnap.exists()) setWorkshopName(wSnap.data().name || null);
-                        } else if (typeof w === 'object' && w !== null) {
-                            setWorkshopName(w.name || w.title || null);
-                        }
                     }
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* Bỏ qua */ }
 
-                // load material catalog (for price/name lookup) and then repairordermaterial
+                // 4. Tải danh mục vật liệu làm từ catalog
                 try {
                     const matsSnap = await getDocs(collection(db, 'material'));
                     const mats = matsSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
                     setMaterialsCatalog(mats);
 
                     if (orderData?.id) {
+                        // Tải vật tư được giám định viên đề xuất của đơn
                         const q = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
                         const snap = await getDocs(q);
                         if (!snap.empty) {
@@ -242,14 +213,15 @@ const OrderInfo: React.FC = () => {
                             });
                             setMaterialLines(lines);
                         }
-                        // load labor lines as well
+                        
+                        // Tải nhân công thợ được giám định viên phân công kèm đơn giá
                         try {
                             const lq = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
                             const lsnap = await getDocs(lq);
                             if (!lsnap.empty) {
                                 const ll = lsnap.docs.map(d => {
                                     const data = d.data() as any;
-                                    const days = Math.max(1, Number(data.Days ?? data.Quantity ?? data.qty ?? 0) || 1);
+                                    const days = Math.max(1, Number(data.Days ?? data.Quantity ?? 0) || 1);
                                     const expertise = (data.Expertise || data.expertise || '').toString().trim();
                                     const storedRate = Number(data.UnitPrice || 350000);
                                     const expertiseBasedRate = expertise ? getExpertiseRate(expertise) : null;
@@ -266,11 +238,9 @@ const OrderInfo: React.FC = () => {
                                 });
                                 setLaborLines(ll);
                             }
-                        } catch (e2) { /* ignore */ }
+                        } catch (e2) { /* Bỏ qua */ }
                     }
-                } catch (e) {
-                    // ignore
-                }
+                } catch (e) { /* Bỏ qua */ }
             } catch (err) {
                 console.error(err);
                 message.error('Lỗi khi tải thông tin đơn');
@@ -283,7 +253,7 @@ const OrderInfo: React.FC = () => {
 
     if (loading) return <Spin />;
 
-    // Costs: prefer saved on repairOrder, else compute from lines
+    // Tính toán chi phí phục vụ hiển thị
     const computedMaterials = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
     const computedLabor = laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
     const materialsCost = (order?.materialsCost !== undefined && order?.materialsCost !== null) ? Number(order.materialsCost) : computedMaterials;
@@ -292,25 +262,21 @@ const OrderInfo: React.FC = () => {
 
     return (
         <WorkshopLayout selectedKey="orders" onSelect={(k) => { if (k === 'schedule') navigate('/workshop?tab=schedule'); else navigate('/workshop'); }} userName={headerName} loadingUser={false}>
-            {/* keep default margins so content has comfortable left/right spacing */}
             <div>
                 <div className="flex items-center justify-between mb-4">
                     <Title level={4} className="m-0">Thông tin chi tiết đơn sửa chữa</Title>
                     <Button onClick={() => navigate(-1)}>Quay lại</Button>
                 </div>
 
+                {/* Bảng thuộc tính thông tin đơn sửa chữa */}
                 <Descriptions title="Thông tin đơn" bordered column={1}>
-                    <Descriptions.Item label="Trạng thái">{order?.Status || order?.status || '—'}</Descriptions.Item>
+                    <Descriptions.Item label="Trạng thái">{order?.Status || '—'}</Descriptions.Item>
                     <Descriptions.Item label="Ngày tạo">
                         {(() => {
                             const fmt = (v: any) => {
                                 if (!v) return undefined;
                                 try {
                                     if (typeof v === 'string') {
-                                        const m = moment(v);
-                                        return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
-                                    }
-                                    if (typeof v === 'number') {
                                         const m = moment(v);
                                         return m.isValid() ? m.format('DD/MM/YYYY HH:mm') : undefined;
                                     }
@@ -331,15 +297,8 @@ const OrderInfo: React.FC = () => {
 
                             const candidates = [
                                 order?.StartDate,
-                                order?.startDate,
                                 order?.CreatedAt,
                                 order?.createdAt,
-                                order?.CreateDate,
-                                order?.createDate,
-                                order?.DateCreated,
-                                order?.dateCreated,
-                                order?.created_on,
-                                order?.createdOn,
                             ];
                             for (const c of candidates) {
                                 const out = fmt(c);
@@ -349,12 +308,13 @@ const OrderInfo: React.FC = () => {
                         })()}
                     </Descriptions.Item>
                     <Descriptions.Item label="Tóm tắt hỏng hóc">
-                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{order?.Description || order?.description || order?.RepairContent || '—'}</div>
+                        <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{order?.Description || '—'}</div>
                     </Descriptions.Item>
                 </Descriptions>
 
                 <div style={{ height: 16 }} />
 
+                {/* Bảng thuộc tính thông tin Tàu */}
                 <Descriptions title="Thông tin tàu" bordered column={1}>
                     <Descriptions.Item label="Tên tàu">{ship?.name || '—'}</Descriptions.Item>
                     {ship?.registration_number && (
@@ -391,12 +351,11 @@ const OrderInfo: React.FC = () => {
 
                 <div style={{ height: 16 }} />
 
-                {/* Customer info removed by request */}
-
                 <Descriptions title="Thông tin xưởng" bordered column={1}>
                     <Descriptions.Item label="Xưởng">{workshopName || '—'}</Descriptions.Item>
                 </Descriptions>
 
+                {/* Bảng phương án sửa chữa kỹ thuật và danh sách vật tư/nhân công chi tiết */}
                 {((order as any)?.repairplan || materialLines.length > 0) && (
                     <div className="mt-6 w-full">
                         {(order as any)?.repairplan && (
@@ -451,7 +410,7 @@ const OrderInfo: React.FC = () => {
                             <Card size="small" title="Nhân công đề xuất" className="mt-4" style={{ width: '100%' }}>
                                 <Row gutter={8} className="mb-2 font-medium">
                                     <Col span={12}><div>Nhân viên</div></Col>
-                                        <Col span={12}><div>Số ngày</div></Col>
+                                    <Col span={12}><div>Số ngày</div></Col>
                                 </Row>
 
                                 {laborLines.map((line, idx) => (
@@ -459,7 +418,7 @@ const OrderInfo: React.FC = () => {
                                         <Col span={12}>
                                             <div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div>
                                         </Col>
-                                            <Col span={12}>
+                                        <Col span={12}>
                                             <div style={{ paddingTop: 6 }}>{line.days}</div>
                                         </Col>
                                     </Row>
@@ -468,8 +427,9 @@ const OrderInfo: React.FC = () => {
                                 <div className="text-right font-medium">Chi phí nhân công: {laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0).toLocaleString('vi-VN')} đ</div>
                             </Card>
                         )}
+                        
                         {(materialLines.length > 0 || laborLines.length > 0) && (
-                            <div className="text-right font-semibold mt-2">Tổng chi phí: {(materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0) + laborLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0)).toLocaleString('vi-VN')} đ</div>
+                            <div className="text-right font-semibold mt-2">Tổng chi phí dự toán: {totalCost.toLocaleString('vi-VN')} đ</div>
                         )}
                     </div>
                 )}

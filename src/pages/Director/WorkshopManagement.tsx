@@ -4,15 +4,17 @@ import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, query, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 
+// Định nghĩa Interface Xưởng sửa chữa
 interface Workshop {
     id: string;
     name: string;
     location: string;
     area: string;
     status: string;
-    ownerID: string;
+    ownerID: string; // Khóa ngoại liên kết tới Chủ xưởng sửa chữa
 }
 
+// Interface định dạng Options cho ô Select chọn chủ xưởng
 interface UserOption {
     uid: string;
     name: string;
@@ -20,26 +22,29 @@ interface UserOption {
 }
 
 const WorkshopManagement: React.FC = () => {
-    const [workshops, setWorkshops] = useState<Workshop[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [isModalVisible, setIsModalVisible] = useState(false);
-    const [editingWorkshop, setEditingWorkshop] = useState<Workshop | null>(null);
-    const [userMap, setUserMap] = useState<Record<string, string>>({});
-    const [potentialOwners, setPotentialOwners] = useState<UserOption[]>([]);
-    const [form] = Form.useForm();
-    const [messageApi, contextHolder] = message.useMessage();
+    const [workshops, setWorkshops] = useState<Workshop[]>([]); // Danh sách xưởng
+    const [loading, setLoading] = useState(false); // Trạng thái tải bảng xưởng
+    const [isModalVisible, setIsModalVisible] = useState(false); // Trạng thái đóng/mở Modal CRUD
+    const [editingWorkshop, setEditingWorkshop] = useState<Workshop | null>(null); // Bản ghi xưởng đang sửa (null là thêm mới)
+    const [userMap, setUserMap] = useState<Record<string, string>>({}); // Bản đồ ánh xạ ID người dùng sang Họ tên (để hiển thị nhanh tên chủ xưởng)
+    const [potentialOwners, setPotentialOwners] = useState<UserOption[]>([]); // Danh sách chủ xưởng hợp lệ để lựa chọn
+    const [form] = Form.useForm(); // Quản lý dữ liệu Form
+    const [messageApi, contextHolder] = message.useMessage(); // Thông báo toast
 
+    /**
+     * Tải danh sách những người dùng có vai trò là "workshop_owner" (Chủ xưởng) 
+     * để làm nguồn dữ liệu nạp vào Select Box
+     */
     const fetchPotentialOwners = async () => {
         try {
-            // Use Firestore query to filter by role
-            const q = query(collection(db, 'users'),where('role', '==', 'workshop_owner'));
+            const q = query(collection(db, 'users'), where('role', '==', 'workshop_owner'));
             const usersSnap = await getDocs(q);
             const options: UserOption[] = [];
             usersSnap.forEach(doc => {
                 const d = doc.data();
                 options.push({
                     uid: d.uid || doc.id,
-                    name: d.fullName || d.UserName || d.name || d.displayName || d.email || 'Unknown',
+                    name: d.fullName || d.UserName || d.email || 'Unknown',
                     role: d.role
                 });
             });
@@ -49,6 +54,9 @@ const WorkshopManagement: React.FC = () => {
         }
     };
 
+    /**
+     * Tải toàn bộ danh sách các xưởng sửa chữa và lấy tên chủ xưởng tương ứng
+     */
     const fetchWorkshops = async () => {
         setLoading(true);
         try {
@@ -59,68 +67,49 @@ const WorkshopManagement: React.FC = () => {
             });
             setWorkshops(workshopList);
             
-            // Fetch owner names
+            // Lấy danh sách các ID chủ xưởng duy nhất để truy vấn họ tên hiển thị
             const ownerIds = Array.from(new Set(workshopList.map(w => w.ownerID).filter(id => id)));
             const newUserMap: Record<string, string> = {};
             
+            // Truy vấn thông tin tên của từng chủ xưởng dựa trên UID qua 4 bước kiểm tra
             await Promise.all(ownerIds.map(async (uid) => {
                 if (!uid) return;
                 try {
                     let name = '';
                     
-                    // 1. Try users collection by Doc ID
+                    // 1. Kiểm tra trong collection 'users' theo Document ID
                     const userDoc = await getDoc(doc(db, 'users', uid));
                     if (userDoc.exists()) {
                         const d = userDoc.data();
-                        name = d.fullName || d.UserName || d.name || d.displayName || '';
+                        name = d.fullName || d.UserName || '';
                     }
 
-                    // 2. If not found, try users collection by uid field
+                    // 2. Dự phòng 1: Kiểm tra trong 'users' theo thuộc tính uid
                     if (!name) {
                          const q = query(collection(db, 'users'), where('uid', '==', uid));
                          const snap = await getDocs(q);
                          if (!snap.empty) {
                              const d = snap.docs[0].data();
-                             name = d.fullName || d.UserName || d.name || d.displayName || '';
+                             name = d.fullName || d.UserName || '';
                          }
                     }
 
-                    // 3. If not found, try employees collection by Doc ID
+                    // 3. Dự phòng 2: Kiểm tra trong 'employees' theo Doc ID
                     if (!name) {
                         const empDoc = await getDoc(doc(db, 'employees', uid));
                         if (empDoc.exists()) {
                             const d = empDoc.data();
-                            name = d.fullName || d.UserName || d.name || d.displayName || '';
+                            name = d.fullName || d.UserName || '';
                         }
                     }
 
-                    // 4. If not found, try employees collection by uid field
-                    if (!name) {
-                         const q = query(collection(db, 'employees'), where('uid', '==', uid));
-                         const snap = await getDocs(q);
-                         if (!snap.empty) {
-                             const d = snap.docs[0].data();
-                             name = d.fullName || d.UserName || d.name || d.displayName || '';
-                         }
-                    }
-
-                    // 5. If not found, try customers collection by Doc ID
+                    // 4. Dự phòng 3: Kiểm tra trong 'customers' theo Doc ID
                     if (!name) {
                         const custDoc = await getDoc(doc(db, 'customers', uid));
                         if (custDoc.exists()) {
                             const d = custDoc.data();
-                            name = d.fullName || d.UserName || d.name || d.displayName || '';
+                            name = d.fullName || d.UserName || '';
                         }
-                    }
-
-                    // 6. If not found, try customers collection by uid field
-                    if (!name) {
-                         const q = query(collection(db, 'customers'), where('uid', '==', uid));
-                         const snap = await getDocs(q);
-                         if (!snap.empty) {
-                             const d = snap.docs[0].data();
-                             name = d.fullName || d.UserName || d.name || d.displayName || '';
-                         }
                     }
 
                     if (name) {
@@ -134,7 +123,6 @@ const WorkshopManagement: React.FC = () => {
                 }
             }));
             setUserMap(newUserMap);
-
         } catch (error) {
             console.error("Error fetching workshops: ", error);
             messageApi.error('Không thể tải danh sách xưởng');
@@ -143,22 +131,24 @@ const WorkshopManagement: React.FC = () => {
         }
     };
 
+    // Tải dữ liệu ban đầu
     useEffect(() => {
         fetchWorkshops();
         fetchPotentialOwners();
     }, []);
 
+    // Nhấp nút "Thêm xưởng" để mở Form rỗng
     const handleAdd = () => {
         setEditingWorkshop(null);
         form.resetFields();
         setIsModalVisible(true);
     };
 
+    // Nhấp "Sửa" xưởng để mở Form điền dữ liệu của xưởng đã chọn
     const handleEdit = (record: Workshop) => {
         setEditingWorkshop(record);
         
-        // Kiểm tra xem ownerID hiện tại có nằm trong danh sách chủ xưởng (có tên) hay không
-        // Nếu không có trong danh sách (tức là không lấy được tên), thì set thành undefined để ô input trống
+        // Kiểm tra xem ID chủ xưởng này có nằm trong danh sách chủ xưởng hợp lệ hiện tại hay không
         const ownerExists = potentialOwners.some(u => u.uid === record.ownerID);
         
         form.setFieldsValue({
@@ -168,6 +158,7 @@ const WorkshopManagement: React.FC = () => {
         setIsModalVisible(true);
     };
 
+    // Xóa xưởng khỏi Firestore
     const handleDelete = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'workShop', id));
@@ -179,11 +170,12 @@ const WorkshopManagement: React.FC = () => {
         }
     };
 
+    // Thực hiện Lưu thông tin xưởng (Thêm mới hoặc Cập nhật)
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
 
-            // Check duplicate name
+            // Kiểm tra trùng lặp tên xưởng
             const isDuplicate = workshops.some(w => 
                 w.name.trim().toLowerCase() === values.name.trim().toLowerCase() && 
                 (!editingWorkshop || w.id !== editingWorkshop.id)
@@ -195,12 +187,12 @@ const WorkshopManagement: React.FC = () => {
             }
 
             if (editingWorkshop) {
-                // Update
+                // Cập nhật thông tin xưởng đã có
                 const workshopRef = doc(db, 'workShop', editingWorkshop.id);
                 await updateDoc(workshopRef, values);
                 messageApi.success('Cập nhật xưởng thành công');
             } else {
-                // Create
+                // Tạo tài liệu xưởng mới
                 await addDoc(collection(db, 'workShop'), values);
                 messageApi.success('Thêm xưởng thành công');
             }
@@ -208,14 +200,15 @@ const WorkshopManagement: React.FC = () => {
             fetchWorkshops();
         } catch (error) {
             console.error("Error saving workshop: ", error);
-            // message.error('Có lỗi xảy ra khi lưu thông tin'); // Prevent double error if validateFields fails
         }
     };
 
+    // Hủy bỏ thao tác sửa/thêm
     const handleCancel = () => {
         setIsModalVisible(false);
     };
 
+    // Cấu hình các cột hiển thị của bảng quản lý xưởng
     const columns = [
         {
             title: 'Tên xưởng',
@@ -236,7 +229,7 @@ const WorkshopManagement: React.FC = () => {
             title: 'Chủ xưởng',
             dataIndex: 'ownerID',
             key: 'ownerID',
-            render: (id: string) => userMap[id] || id || 'Chưa có',
+            render: (id: string) => userMap[id] || id || 'Chưa có', // Đối chiếu tên chủ xưởng qua map
         },
         {
             title: 'Hành động',
@@ -271,6 +264,7 @@ const WorkshopManagement: React.FC = () => {
                 </Button>
             </div>
 
+            {/* Bảng hiển thị danh sách xưởng */}
             <Table
                 columns={columns}
                 dataSource={workshops}
@@ -278,6 +272,7 @@ const WorkshopManagement: React.FC = () => {
                 loading={loading}
             />
 
+            {/* Modal CRUD thêm / sửa xưởng */}
             <Modal
                 title={editingWorkshop ? "Sửa thông tin xưởng" : "Thêm xưởng mới"}
                 open={isModalVisible}

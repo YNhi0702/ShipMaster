@@ -5,52 +5,65 @@ import { db } from '../../firebase';
 
 const { Title } = Typography;
 
+// Bảng giá nhân công cơ bản theo chuyên môn kỹ thuật của thợ sửa chữa tàu
 const EXPERTISE_RATES: { [key: string]: number } = {
-    'Thợ hàn / cơ khí vỏ tàu': 600000,
-    'Thợ máy tàu': 800000,
-    'Thợ điện tàu': 650000,
-    'Thợ sơn / vệ sinh tàu': 450000,
+    'Thợ hàn / cơ khí vỏ tàu': 600000, 
+    'Thợ máy tàu': 800000,             
+    'Thợ điện tàu': 650000,            // Đơn giá ngày công cơ bản cho thợ điện
+    'Thợ sơn / vệ sinh tàu': 450000,   // Đơn giá ngày công cơ bản cho thợ sơn
 };
 
+/**
+ * Hàm tính toán đơn giá ngày công thực tế dựa trên chuyên môn và bậc tay nghề (Ví dụ: "Thợ máy tàu - Bậc 3")
+ * @param expertise Chuỗi chuyên môn của nhân công
+ * @returns Đơn giá ngày công tương ứng đã nhân hệ số bậc thợ
+ */
 const getExpertiseRate = (expertise: string): number => {
-    if (!expertise) return 350000; // default fallback
+    if (!expertise) return 350000; // Trả về đơn giá mặc định nếu không có thông tin chuyên môn
     const normalized = expertise.trim().toLowerCase();
     
-    // Tách chuyên môn và bậc năng lực (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
+    // Tách chuỗi chuyên môn và bậc tay nghề dựa trên dấu gạch ngang " - "
     const parts = normalized.split(' - ');
-    const baseExp = parts[0] ? parts[0].trim() : '';
-    const levelStr = parts[1] ? parts[1].trim() : '';
+    const baseExp = parts[0] ? parts[0].trim() : '';  // Tên chuyên môn (VD: thợ máy tàu)
+    const levelStr = parts[1] ? parts[1].trim() : ''; // Bậc thợ (VD: bậc 1, bậc 3)
 
-    let baseRate = 350000; // default fallback
+    let baseRate = 350000; // Đơn giá mặc định dự phòng
     for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
         if (key.toLowerCase() === baseExp) {
-            baseRate = rate;
+            baseRate = rate; // Tìm đơn giá khớp với chuyên môn cơ bản
             break;
         }
     }
 
+    // Áp dụng hệ số bậc thợ
     if (levelStr === 'bậc 1') {
-        return baseRate * 0.8;
+        return baseRate * 0.8;      // Thợ bậc 1 (mới vào nghề): hưởng 80% lương cơ bản
     } else if (levelStr === 'bậc 3') {
-        return baseRate * 1.25;
+        return baseRate * 1.25;     // Thợ bậc 3 (lành nghề): hưởng 125% lương cơ bản
     }
-    return baseRate; // mặc định Bậc 2
+    return baseRate; // Mặc định bậc 2 hưởng 100% lương cơ bản
 };
 
+// Đơn giá nhân công mặc định dự phòng
 const DEFAULT_LABOR_RATE = 350000;
 
+/**
+ * Hàm chuyển đổi an toàn các giá trị tiền tệ hoặc số lượng từ kiểu dữ liệu bất kỳ sang kiểu Number
+ */
 const parseAmount = (value: any, fallback = 0): number => {
     if (typeof value === 'number' && Number.isFinite(value)) {
-        return value;
+        return value; // Nếu đã là số hợp lệ thì trả về luôn
     }
 
     if (typeof value === 'string') {
+        // Loại bỏ toàn bộ ký tự không phải số, dấu phẩy, dấu chấm, dấu trừ
         const normalized = value.replace(/[^0-9,.-]/g, '').replace(/,/g, '.');
         const numeric = Number(normalized);
         if (!Number.isNaN(numeric)) {
             return numeric;
         }
 
+        // Dự phòng lấy các chữ số nguyên
         const digitsOnly = value.replace(/[^0-9-]/g, '');
         const fallbackNumber = Number(digitsOnly);
         if (!Number.isNaN(fallbackNumber)) {
@@ -58,14 +71,18 @@ const parseAmount = (value: any, fallback = 0): number => {
         }
     }
 
-    return fallback;
+    return fallback; // Trả về giá trị mặc định dự phòng
 };
 
+/**
+ * Hàm định dạng hiển thị các giá trị chi tiết thuộc tính sang chuỗi văn bản
+ */
 const formatDetailValue = (value: any): string => {
     if (value === null || value === undefined) {
         return '';
     }
     if (typeof value === 'string') {
+        // Nếu đã là chuỗi thì trả về chuỗi đó
         return value;
     }
     if (typeof value === 'number' || typeof value === 'boolean') {
@@ -75,6 +92,7 @@ const formatDetailValue = (value: any): string => {
         return isNaN(value.getTime()) ? '' : value.toLocaleString('vi-VN');
     }
     if (value?.toDate && typeof value.toDate === 'function') {
+        // Chuyển đổi kiểu Timestamp của Firestore sang Date của JS
         const dateVal = value.toDate();
         return !dateVal || isNaN(dateVal.getTime()) ? '' : dateVal.toLocaleString('vi-VN');
     }
@@ -85,6 +103,7 @@ const formatDetailValue = (value: any): string => {
     }
 };
 
+// Hàm lấy số an toàn, tránh lỗi NaN
 const safeNumber = (value: any, fallback = 0): number => {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return value;
@@ -92,153 +111,45 @@ const safeNumber = (value: any, fallback = 0): number => {
     return fallback;
 };
 
+/**
+ * Trích xuất mã khách hàng một cách thống nhất từ tài liệu đơn sửa chữa
+ */
 const resolveOrderCustomerId = (orderData: Record<string, any> | null | undefined, fallback?: any): string => {
-    const candidateIds = [
-        orderData?.Customer_ID,
-        orderData?.customerId,
-        orderData?.CustomerId,
-        orderData?.customer_id,
-        orderData?.uid,
-        orderData?.createdBy,
-        orderData?.userId,
-        orderData?.creatorId,
-        orderData?.owner,
-        orderData?.customer?.id,
-        fallback?.customerId,
-        fallback?.Customer_ID,
-        fallback?.customer_id,
-        fallback?.uid,
-        fallback?.createdBy,
-        fallback?.userId,
-        fallback?.creatorId,
-        fallback?.owner,
-        fallback?.customer?.id,
-    ];
-
-    const resolved = candidateIds.find((value) => typeof value === 'string' && value.trim().length > 0);
-    return resolved ? String(resolved).trim() : '';
+    // Thống nhất quy chuẩn đặt tên: Khách hàng được định danh bằng trường 'uid'
+    const resolved = orderData?.uid || orderData?.customerId || fallback?.uid || fallback?.customerId || '';
+    return typeof resolved === 'string' ? resolved.trim() : '';
 };
 
 const AccountHome: React.FC = () => {
-    const [invoices, setInvoices] = useState<any[]>([]);
-    const [loadingInvoices, setLoadingInvoices] = useState<boolean>(true);
-    const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
-    const [modalLoading, setModalLoading] = useState(false);
-    const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
-    const [materialLines, setMaterialLines] = useState<any[]>([]);
-    const [laborLines, setLaborLines] = useState<any[]>([]);
-    const [discountAmount, setDiscountAmount] = useState(0);
-    const [discountEligible, setDiscountEligible] = useState(false);
-    const [savingInvoice, setSavingInvoice] = useState(false);
-    const selectedOrderIdRef = useRef<string | null>(null);
+    const [invoices, setInvoices] = useState<any[]>([]); // Danh sách các hóa đơn chờ xử lý
+    const [loadingInvoices, setLoadingInvoices] = useState<boolean>(true); // Trạng thái tải danh sách hóa đơn
+    const [invoiceModalOpen, setInvoiceModalOpen] = useState(false); // Trạng thái mở/đóng Modal tạo hóa đơn
+    const [modalLoading, setModalLoading] = useState(false); // Trạng thái tải dữ liệu chi tiết trong Modal
+    const [selectedOrder, setSelectedOrder] = useState<any | null>(null); // Đơn sửa chữa đang được chọn để lập hóa đơn
+    const [materialLines, setMaterialLines] = useState<any[]>([]); // Danh sách dòng vật tư của đơn hàng
+    const [laborLines, setLaborLines] = useState<any[]>([]); // Danh sách dòng nhân công của đơn hàng
+    const [savingInvoice, setSavingInvoice] = useState(false); // Trạng thái đang lưu hóa đơn lên Firestore
+    const selectedOrderIdRef = useRef<string | null>(null); // Dùng Ref để kiểm soát bất đồng bộ tải dữ liệu theo ID đơn hàng
 
+    // Hàm định dạng số tiền sang chuẩn VNĐ
     const formatCurrency = (value: number) =>
         Number.isFinite(value) ? value.toLocaleString('vi-VN', { style: 'currency', currency: 'VND' }) : '---';
 
+    // Hàm reset lại trạng thái ban đầu của Modal tạo hóa đơn
     const resetModalState = () => {
         selectedOrderIdRef.current = null;
         setSelectedOrder(null);
         setMaterialLines([]);
         setLaborLines([]);
-        setDiscountAmount(0);
-        setDiscountEligible(false);
     };
 
-    const evaluateDiscount = async (orderOrId: any) => {
-        // Accept either order object or order id string
-        let orderId = typeof orderOrId === 'string' ? orderOrId : orderOrId?.id;
-        if (!orderId && orderOrId) {
-            // try to extract id-like fields
-            orderId = orderOrId?.RepairOrder_ID || orderOrId?.repairOrderId || orderOrId?.orderId || null;
-        }
-
-        if (!orderId) {
-            setDiscountAmount(0);
-            setDiscountEligible(false);
-            return;
-        }
-
-        try {
-            const orderSnap = await getDoc(doc(db, 'repairOrder', orderId));
-            const orderData = orderSnap.exists() ? (orderSnap.data() as any) : (typeof orderOrId === 'object' ? orderOrId : null);
-            const customerId = resolveOrderCustomerId(orderData, orderOrId);
-
-            if (!customerId) {
-                setDiscountAmount(0);
-                setDiscountEligible(false);
-                return;
-            }
-
-            // Fetch customer record robustly
-            let customerData: any = null;
-            try {
-                const customerSnap = await getDoc(doc(db, 'customers', String(customerId)));
-                customerData = customerSnap.exists() ? (customerSnap.data() as any) : null;
-            } catch (e) {
-                // ignore
-            }
-
-            if (!customerData) {
-                const customerQuerySnap = await getDocs(
-                    query(collection(db, 'customers'), where('uid', '==', String(customerId)))
-                );
-                customerData = customerQuerySnap.empty ? null : (customerQuerySnap.docs[0].data() as any);
-            }
-
-            const referredByUid = (customerData && (customerData.referredByUid || customerData.referredBy || customerData.referred_uid)) || '';
-
-            if (!referredByUid) {
-                setDiscountAmount(0);
-                setDiscountEligible(false);
-                return;
-            }
-
-            // Check existing invoices for this customer. If any invoice exists, they are not eligible.
-            try {
-                const invoiceSnapshot = await getDocs(collection(db, 'invoice'));
-                const customerInvoices = invoiceSnapshot.docs.filter((invDoc) => {
-                    const inv = invDoc.data() as any;
-                    const invCustomerId = String(
-                        inv?.Customer_ID ||
-                        inv?.customerId ||
-                        inv?.CustomerId ||
-                        inv?.customer_id ||
-                        inv?.customer_uid ||
-                        inv?.uid ||
-                        inv?.createdBy ||
-                        inv?.userId ||
-                        ''
-                    );
-                    return invCustomerId === String(customerId);
-                });
-
-                const hasExistingInvoice = customerInvoices.length > 0;
-                const eligible = Boolean(referredByUid) && !hasExistingInvoice;
-                setDiscountEligible(eligible);
-                setDiscountAmount(eligible ? 0.05 : 0);
-
-                if (eligible) {
-                    // show a small toast so user can see discount applied
-                    message.success('Áp dụng giảm giá 5% cho hóa đơn đầu tiên của khách được giới thiệu.');
-                    console.debug('evaluateDiscount: eligible=true', { orderId, customerId, referredByUid });
-                } else {
-                    console.debug('evaluateDiscount: eligible=false', { orderId, customerId, referredByUid, hasExistingInvoice });
-                }
-            } catch (err) {
-                console.warn('Failed to check existing invoices for discount eligibility', err);
-                setDiscountEligible(false);
-                setDiscountAmount(0);
-            }
-        } catch (error) {
-            console.warn('Failed to evaluate discount eligibility', error);
-            setDiscountAmount(0);
-            setDiscountEligible(false);
-        }
-    };
-
+    /**
+     * Tải danh sách chi tiết vật tư và nhân công của đơn sửa chữa tương ứng
+     */
     const loadOrderDetails = async (orderId: string) => {
         setModalLoading(true);
         try {
+            // Hàm con hỗ trợ tải tài liệu từ collection với danh sách trường kiểm tra đa dạng
             const loadCollection = async (collectionName: string, fieldCandidates: string[]) => {
                 let docs: any[] = [];
                 for (const field of fieldCandidates) {
@@ -249,7 +160,7 @@ const AccountHome: React.FC = () => {
                             break;
                         }
                     } catch (error) {
-                        // ignore invalid field errors
+                        // Bỏ qua lỗi trường không tồn tại
                     }
                 }
 
@@ -264,6 +175,7 @@ const AccountHome: React.FC = () => {
                 return docs;
             };
 
+            // 1. Tải danh sách vật tư đã dùng của đơn hàng
             const materialDocs = await loadCollection('repairordermaterial', ['RepairOrder_ID', 'repairOrderId', 'orderId', 'RepairOrderId', 'RepairOrderID', 'Order_ID']);
             const materialIdSet = new Set<string>();
             materialDocs.forEach((docSnap: any) => {
@@ -274,7 +186,6 @@ const AccountHome: React.FC = () => {
                     data?.MaterialId,
                     data?.material_id,
                     data?.Material?.id,
-                    (typeof data?.Material === 'string' ? data.Material : null),
                 ];
                 candidates.forEach((val) => {
                     if (typeof val === 'string' && val.trim()) {
@@ -283,6 +194,7 @@ const AccountHome: React.FC = () => {
                 });
             });
 
+            // Truy vấn thông tin chi tiết tên vật tư, đơn giá từ catalog 'material'
             const materialCatalog: Record<string, any> = {};
             if (materialIdSet.size > 0) {
                 const materialEntries = await Promise.all(
@@ -305,52 +217,21 @@ const AccountHome: React.FC = () => {
                 });
             }
 
+            // Định dạng danh sách vật tư hiển thị
             const materials = materialDocs.map((docSnap: any, index: number) => {
                 const data = docSnap.data() as any;
-                const quantity = parseAmount(
-                    data?.QuantityUsed ??
-                    data?.quantity ??
-                    data?.Quantity ??
-                    data?.qty ??
-                    data?.QuantityUsed ??
-                    0
-                );
-
+                const quantity = parseAmount(data?.QuantityUsed ?? data?.quantity ?? data?.Quantity ?? data?.qty ?? 0);
                 const materialId = [
                     data?.Material_ID,
                     data?.materialId,
                     data?.MaterialId,
                     data?.material_id,
-                    data?.Material?.id,
-                    (typeof data?.Material === 'string' ? data.Material : null),
                 ].find((val) => typeof val === 'string' && val.trim()) || '';
 
                 const catalogEntry = materialId ? materialCatalog[String(materialId)] : undefined;
-                const fallbackUnitPrice = parseAmount(
-                    data?.UnitPrice ??
-                    data?.unitPrice ??
-                    data?.Price ??
-                    data?.price ??
-                    data?.UnitCost ??
-                    data?.unitCost ??
-                    catalogEntry?.Price ??
-                    catalogEntry?.price ??
-                    0
-                );
-
-                const totalCost = parseAmount(
-                    data?.TotalCost ??
-                    data?.totalCost ??
-                    data?.Amount ??
-                    data?.amount ??
-                    data?.Cost ??
-                    data?.cost ??
-                    data?.Total ??
-                    data?.total ??
-                    quantity * fallbackUnitPrice
-                );
-
-                const name = (data?.MaterialName || data?.materialName || data?.name || catalogEntry?.Name || catalogEntry?.name || data?.ItemName) || `Vật liệu ${index + 1}`;
+                const fallbackUnitPrice = parseAmount(data?.UnitPrice ?? data?.unitPrice ?? data?.Price ?? data?.price ?? catalogEntry?.Price ?? catalogEntry?.price ?? 0);
+                const totalCost = parseAmount(data?.TotalCost ?? data?.totalCost ?? data?.Amount ?? data?.amount ?? quantity * fallbackUnitPrice);
+                const name = (data?.MaterialName || data?.materialName || data?.name || catalogEntry?.Name || catalogEntry?.name) || `Vật liệu ${index + 1}`;
                 const unit = data?.Unit || data?.unit || catalogEntry?.Unit || catalogEntry?.unit || undefined;
 
                 return {
@@ -365,6 +246,7 @@ const AccountHome: React.FC = () => {
                 };
             });
 
+            // 2. Tải danh sách nhân công sửa chữa tham gia của đơn hàng
             const laborDocs = await loadCollection('repairorderlabor', ['RepairOrder_ID', 'repairOrderId', 'orderId', 'RepairOrderId', 'RepairOrderID', 'Order_ID']);
             const employeeIdSet = new Set<string>();
             laborDocs.forEach((docSnap: any) => {
@@ -374,7 +256,6 @@ const AccountHome: React.FC = () => {
                     data?.employeeId,
                     data?.EmployeeId,
                     data?.employee_id,
-                    data?.LaborerId,
                 ];
                 candidates.forEach((val) => {
                     if (typeof val === 'string' && val.trim()) {
@@ -383,6 +264,7 @@ const AccountHome: React.FC = () => {
                 });
             });
 
+            // Truy vấn thông tin tên nhân công từ bảng 'employees' hoặc 'users'
             const employeeCatalog: Record<string, any> = {};
             if (employeeIdSet.size > 0) {
                 const employeeEntries = await Promise.all(
@@ -392,18 +274,14 @@ const AccountHome: React.FC = () => {
                             if (empSnap.exists()) {
                                 return { id: employeeId, data: empSnap.data() };
                             }
-                        } catch (error) {
-                            // ignore employee lookup errors
-                        }
+                        } catch (error) { /* Bỏ qua lỗi */ }
 
                         try {
                             const userSnap = await getDoc(doc(db, 'users', employeeId));
                             if (userSnap.exists()) {
                                 return { id: employeeId, data: userSnap.data() };
                             }
-                        } catch (error) {
-                            // ignore user lookup errors
-                        }
+                        } catch (error) { /* Bỏ qua lỗi */ }
 
                         return null;
                     })
@@ -415,60 +293,24 @@ const AccountHome: React.FC = () => {
                 });
             }
 
+            // Định dạng danh sách nhân công phục vụ bảng tính tiền
             const labors = laborDocs.map((docSnap: any, index: number) => {
                 const data = docSnap.data() as any;
-                const days = parseAmount(
-                    data?.NumberOfDay ??
-                    data?.numberOfDay ??
-                    data?.NumberOfDays ??
-                    data?.numberOfDays ??
-                    data?.days ??
-                    data?.Days ??
-                    data?.SoNgay ??
-                    data?.SoNgayCong ??
-                    data?.Day ??
-                    data?.soNgay ??
-                    data?.workingDays ??
-                    0
-                );
-
+                const days = parseAmount(data?.NumberOfDay ?? data?.numberOfDay ?? data?.days ?? data?.Days ?? data?.Quantity ?? 0);
                 const employeeId = [
                     data?.Employee_ID,
                     data?.employeeId,
                     data?.EmployeeId,
                     data?.employee_id,
-                    data?.LaborerId,
                 ].find((val) => typeof val === 'string' && val.trim()) || '';
 
                 const employeeInfo = employeeId ? employeeCatalog[String(employeeId)] : undefined;
-
-                const unitRate = parseAmount(
-                    data?.UnitPrice ??
-                    data?.unitPrice ??
-                    data?.Rate ??
-                    data?.rate ??
-                    data?.CostPerDay ??
-                    data?.costPerDay ??
-                    data?.UnitCost ??
-                    data?.unitCost ??
-                    DEFAULT_LABOR_RATE
-                );
-
-                const totalCost = parseAmount(
-                    data?.TotalCost ??
-                    data?.totalCost ??
-                    data?.Amount ??
-                    data?.amount ??
-                    data?.Cost ??
-                    data?.cost ??
-                    days * unitRate
-                );
-
-                const employeeName = (data?.EmployeeName || data?.employeeName || data?.Employee || data?.employee || data?.WorkerName || employeeInfo?.UserName || employeeInfo?.fullName || employeeInfo?.name) || `Nhân công ${index + 1}`;
-                const jobName = (data?.JobName || data?.jobName || data?.Task || data?.task || data?.Work || data?.work || data?.WorkDescription || data?.Description || data?.description) || '';
+                const unitRate = parseAmount(data?.UnitPrice ?? data?.unitPrice ?? data?.Rate ?? data?.rate ?? DEFAULT_LABOR_RATE);
+                const employeeName = (data?.EmployeeName || data?.employeeName || employeeInfo?.UserName || employeeInfo?.fullName) || `Nhân công ${index + 1}`;
+                const jobName = (data?.JobName || data?.jobName || data?.Description || data?.description) || '';
                 const expertise = (data?.Expertise || data?.expertise || '').toString().trim();
 
-                // Use expertise-based rate if available, otherwise use stored rate or default
+                // Tính lương dựa vào chuyên môn bậc thợ hoặc fallback lương cố định
                 const expertiseBasedRate = expertise ? getExpertiseRate(expertise) : null;
                 const finalUnitRate = expertiseBasedRate ?? unitRate;
 
@@ -485,6 +327,7 @@ const AccountHome: React.FC = () => {
                 };
             });
 
+            // Phòng tránh việc cập nhật nhầm state nếu người dùng đã chuyển sang đơn hàng khác
             if (selectedOrderIdRef.current !== orderId) {
                 return;
             }
@@ -501,26 +344,20 @@ const AccountHome: React.FC = () => {
         }
     };
 
+    // Hàm xử lý khi ấn nút "Tạo hóa đơn" trên bảng chính
     const handleCreateInvoice = async (record: any) => {
         setSelectedOrder(record);
         selectedOrderIdRef.current = record.id;
         setInvoiceModalOpen(true);
         setMaterialLines([]);
         setLaborLines([]);
-        setDiscountAmount(0);
-        setDiscountEligible(false);
 
-        // Load order lines first so grandTotal is available when evaluating discount
         try {
             await loadOrderDetails(record.id);
-        } catch (err) {
-            // ignore — loadOrderDetails already reports errors
-        }
-
-        // Evaluate discount after lines are loaded to ensure totals are correct
-        evaluateDiscount(record);
+        } catch (err) { /* Bỏ qua */ }
     };
 
+    // Hàm đóng Modal tạo hóa đơn
     const handleCloseInvoiceModal = () => {
         setInvoiceModalOpen(false);
         resetModalState();
@@ -528,6 +365,7 @@ const AccountHome: React.FC = () => {
         setSavingInvoice(false);
     };
 
+    // Thay đổi số lượng vật tư trực tiếp trên Modal và tự động tính lại chi phí dòng tương ứng
     const handleMaterialQuantityChange = (id: string, value: number | null) => {
         const numericValue = Number(value ?? 0);
         setMaterialLines((prev) =>
@@ -548,6 +386,7 @@ const AccountHome: React.FC = () => {
         );
     };
 
+    // Thay đổi số ngày công của thợ trực tiếp trên Modal và tự động tính lại chi phí tương ứng
     const handleLaborDaysChange = (id: string, value: number | null) => {
         const numericValue = Number(value ?? 0);
         setLaborLines((prev) =>
@@ -564,6 +403,7 @@ const AccountHome: React.FC = () => {
         );
     };
 
+    // Sử dụng useMemo để tối ưu hóa hiệu năng tính toán chi phí hóa đơn khi thay đổi số lượng/ngày công
     const materialTotal = useMemo(
         () => materialLines.reduce((sum, line) => sum + (Number(line.cost) || 0), 0),
         [materialLines]
@@ -573,15 +413,8 @@ const AccountHome: React.FC = () => {
         [laborLines]
     );
     const grandTotal = useMemo(() => materialTotal + laborTotal, [materialTotal, laborTotal]);
-    const appliedDiscountValue = useMemo(
-        () => (discountEligible ? Math.round(grandTotal * discountAmount) : 0),
-        [discountEligible, discountAmount, grandTotal]
-    );
-    const discountedGrandTotal = useMemo(
-        () => grandTotal - appliedDiscountValue,
-        [grandTotal, appliedDiscountValue]
-    );
 
+    // Lưu trữ hóa đơn hoàn chỉnh lên collection 'invoice' trong Firestore
     const handleSaveInvoice = async () => {
         try {
             if (!selectedOrder) {
@@ -589,6 +422,8 @@ const AccountHome: React.FC = () => {
                 return;
             }
             setSavingInvoice(true);
+            
+            // Kiểm tra xem đơn sửa chữa này đã tồn tại hóa đơn nào chưa để tránh tạo trùng
             const existingSnap = await getDocs(
                 query(collection(db, 'invoice'), where('RepairOrder_ID', '==', selectedOrder.id))
             );
@@ -599,76 +434,23 @@ const AccountHome: React.FC = () => {
             }
 
             const customerUidForInvoice = resolveOrderCustomerId(selectedOrder, selectedOrder) || null;
-
-            // Determine if customer already has invoices (by checking multiple candidate fields)
-            let hasExistingCustomerInvoice = false;
-            try {
-                const invoiceSnapshot = await getDocs(collection(db, 'invoice'));
-                const customerInvoices = invoiceSnapshot.docs.filter((invDoc) => {
-                    const inv = invDoc.data() as any;
-                    const invCustomerId = String(
-                        inv?.Customer_ID ||
-                        inv?.customerId ||
-                        inv?.CustomerId ||
-                        inv?.customer_id ||
-                        inv?.customer_uid ||
-                        inv?.uid ||
-                        inv?.createdBy ||
-                        inv?.userId ||
-                        ''
-                    );
-                    return invCustomerId === String(customerUidForInvoice);
-                });
-                hasExistingCustomerInvoice = customerInvoices.length > 0;
-            } catch (err) {
-                console.warn('Failed to check existing invoices for customer', err);
-            }
-
-            // stt: 0 if customer had previous invoice(s), otherwise 1
-            const sttValue = hasExistingCustomerInvoice ? 0 : 1;
-
-            // Re-check customer referral to decide discount eligibility for first invoice
-            let referredByUid = '';
-            if (customerUidForInvoice) {
-                try {
-                    const customerSnap = await getDoc(doc(db, 'customers', String(customerUidForInvoice)));
-                    if (customerSnap.exists()) {
-                        const cust = customerSnap.data() as any;
-                        referredByUid = cust?.referredByUid || '';
-                    } else {
-                        const customerQuerySnap = await getDocs(
-                            query(collection(db, 'customers'), where('uid', '==', String(customerUidForInvoice)))
-                        );
-                        if (!customerQuerySnap.empty) {
-                            const cust = customerQuerySnap.docs[0].data() as any;
-                            referredByUid = cust?.referredByUid || '';
-                        }
-                    }
-                } catch (err) {
-                    console.warn('Failed to load customer to check referral', err);
-                }
-            }
-
-            const isFirstInvoice = sttValue === 1;
-            const discountRateToApply = isFirstInvoice && referredByUid ? 0.05 : 0;
-            const discountValueToApply = Math.round(grandTotal * discountRateToApply);
-            const finalAmount = Math.max(0, grandTotal - discountValueToApply);
+            const finalAmount = grandTotal;
 
             const invoicePayload = {
-                Invoice_ID: Date.now(),
-                RepairOrder_ID: selectedOrder.id,
+                Invoice_ID: Date.now(), // Tạo mã hóa đơn dựa trên timestamp
+                RepairOrder_ID: selectedOrder.id, // Liên kết tới khóa ngoại đơn sửa chữa
                 Customer_ID: customerUidForInvoice || selectedOrder.customerId || null,
                 OrderCode: selectedOrder.orderCode || null,
-                stt: sttValue,
+                stt: 0, // Không áp dụng stt giảm giá nữa
                 TotalAmount: finalAmount,
                 OriginalTotalAmount: grandTotal,
-                DiscountRate: discountRateToApply,
-                DiscountAmount: discountValueToApply,
+                DiscountRate: 0,
+                DiscountAmount: 0,
                 FinalAmount: finalAmount,
                 RemainingAmount: finalAmount,
                 PaymentMethod: 'Chưa xác định',
                 PaymentStatus: 'Chưa thanh toán',
-                CreatedDate: serverTimestamp(),
+                CreatedDate: serverTimestamp(), // Ngày tạo tự động lấy từ Server Firestore
                 MaterialLines: materialLines.map((line) => ({
                     id: line.id,
                     materialId: line.materialId || null,
@@ -691,18 +473,18 @@ const AccountHome: React.FC = () => {
                 })),
             };
 
+            // Thêm hóa đơn mới vào collection 'invoice'
             await addDoc(collection(db, 'invoice'), invoicePayload);
 
+            // Cập nhật trạng thái đơn sửa chữa thành "Đã tạo hóa đơn"
             const repairOrderRef = doc(db, 'repairOrder', selectedOrder.id);
             await updateDoc(repairOrderRef, {
                 Status: 'Đã tạo hóa đơn',
-                status: 'Đã tạo hóa đơn',
-                currentStatus: 'Đã tạo hóa đơn',
             });
 
             message.success('Đã lưu hóa đơn thành công.');
             handleCloseInvoiceModal();
-            await fetchInvoices();
+            await fetchInvoices(); // Tải lại danh sách bảng hiển thị
         } catch (error) {
             console.error('Failed to save invoice', error);
             message.error('Không thể lưu hóa đơn vào lúc này.');
@@ -711,6 +493,9 @@ const AccountHome: React.FC = () => {
         }
     };
 
+    /**
+     * Tải toàn bộ danh sách đơn sửa chữa có trạng thái đã "Hoàn thành" sửa chữa để kế toán xem và click "Tạo hóa đơn"
+     */
     const fetchInvoices = async () => {
         try {
             setLoadingInvoices(true);
@@ -719,60 +504,53 @@ const AccountHome: React.FC = () => {
             const rows = await Promise.all(
                 snapshot.docs.map(async (d) => {
                     const data = d.data() as any;
-                    const rawStatus = data?.Status || data?.status || data?.currentStatus || '';
+                    const rawStatus = data?.Status || '';
                     const normalizedStatus = typeof rawStatus === 'string' ? rawStatus.toLowerCase() : '';
+                    
+                    // Chỉ lọc hiển thị các đơn sửa chữa có chữ "hoàn thành" trong trạng thái
                     const isCompleted = normalizedStatus.includes('hoàn thành');
                     if (!isCompleted) return null;
 
-                    let shipName = data?.shipName || data?.ShipName || '';
+                    let shipName = data?.shipName || '';
                     if (!shipName) {
                         try {
-                            const shipId = data?.shipId || data?.ShipId || data?.shipID;
+                            const shipId = data?.shipId;
                             if (shipId) {
                                 const shipSnap = await getDoc(doc(db, 'ship', shipId));
                                 if (shipSnap.exists()) {
                                     const shipData = shipSnap.data() as any;
-                                    shipName = shipData?.name || shipData?.Name || shipData?.shipName || '';
+                                    shipName = shipData?.name || '';
                                 }
                             }
-                        } catch (error) {
-                            // ignore ship fetch failures
-                        }
+                        } catch (error) { /* Bỏ qua */ }
                     }
 
-
-                    const rawTotal = data?.totalCost ?? data?.TotalCost ?? data?.totalPrice ?? data?.TotalPrice ?? data?.amount ?? null;
+                    const rawTotal = data?.totalCost ?? 0;
                     const totalCost = typeof rawTotal === 'number' ? rawTotal : Number(rawTotal) || 0;
 
-                    const completionSource = data?.CompletedDate || data?.completedAt || data?.ScheduleEndDate || data?.EndDate || data?.endDate;
+                    const completionSource = data?.ScheduleEndDate || data?.EndDate || null;
                     const completionDate = completionSource?.toDate
                         ? completionSource.toDate()
                         : completionSource instanceof Date
                             ? completionSource
-                            : typeof completionSource === 'string'
-                                ? new Date(completionSource)
-                                : null;
+                            : null;
                     const formattedCompletion = completionDate && !isNaN(completionDate.getTime())
                         ? completionDate.toLocaleDateString('vi-VN')
                         : '';
 
-                    const readableStatus = typeof rawStatus === 'string' && rawStatus.trim().length > 0
-                        ? rawStatus
-                        : 'Hoàn thành sửa chữa';
-
                     return {
                         id: d.id,
-                        orderCode: data?.OrderCode || data?.orderCode || data?.code || data?.orderId || d.id,
+                        orderCode: data?.OrderCode || d.id,
                         shipName: shipName || '---',
                         totalCost,
-                        status: readableStatus,
+                        status: rawStatus || 'Hoàn thành sửa chữa',
                         completedAt: formattedCompletion,
                         customerId: resolveOrderCustomerId(data),
                     };
                 })
             );
 
-            setInvoices(rows.filter(Boolean));
+            setInvoices(rows.filter(Boolean)); // Lọc bỏ các phần tử null
         } catch (error) {
             message.error('Lỗi khi tải dữ liệu hóa đơn!');
         } finally {
@@ -780,10 +558,12 @@ const AccountHome: React.FC = () => {
         }
     };
 
+    // Tự động tải danh sách hóa đơn khi component được render lần đầu
     useEffect(() => {
         fetchInvoices();
     }, []);
 
+    // Cấu hình các cột của bảng chính (danh sách đơn đã sửa xong chờ xuất hóa đơn)
     const columns = [
         {
             title: 'STT',
@@ -791,7 +571,6 @@ const AccountHome: React.FC = () => {
             width: 60,
             render: (_: any, __: any, index: number) => index + 1,
         },
-      
         { title: 'Tàu', dataIndex: 'shipName', key: 'shipName' },
         { title: 'Ngày hoàn thành', dataIndex: 'completedAt', key: 'completedAt' },
         { title: 'Trạng thái', dataIndex: 'status', key: 'status' },
@@ -806,6 +585,7 @@ const AccountHome: React.FC = () => {
         },
     ];
 
+    // Cấu hình cột hiển thị vật liệu trên Modal
     const materialColumns = [
         {
             title: 'STT',
@@ -841,6 +621,7 @@ const AccountHome: React.FC = () => {
         },
     ];
 
+    // Cấu hình cột hiển thị nhân công trên Modal
     const laborColumns = [
         {
             title: 'STT',
@@ -884,6 +665,7 @@ const AccountHome: React.FC = () => {
             <div className="flex items-center justify-between mb-4">
                 <Title level={5} className="m-0">Danh sách chờ tạo hóa đơn</Title>
             </div>
+            
             <Table
                 columns={columns}
                 dataSource={filteredInvoices}
@@ -893,6 +675,8 @@ const AccountHome: React.FC = () => {
                 className="shadow-sm"
                 scroll={{ x: 'max-content' }}
             />
+            
+            {/* Modal lớn dùng để Kế toán điều chỉnh lại số lượng/ngày công nháp và xuất hóa đơn */}
             <Modal
                 open={invoiceModalOpen}
                 title="Tạo hóa đơn"
@@ -920,6 +704,8 @@ const AccountHome: React.FC = () => {
                                 </div>
                             </Card>
                         )}
+                        
+                        {/* Bảng danh sách vật liệu được sử dụng thực tế */}
                         <Card title="Vật liệu" size="small" className="shadow-sm">
                             <Table
                                 columns={materialColumns}
@@ -933,6 +719,8 @@ const AccountHome: React.FC = () => {
                                 Chi phí vật liệu: {formatCurrency(materialTotal)}
                             </div>
                         </Card>
+                        
+                        {/* Bảng danh sách nhân công thợ được gán thực tế */}
                         <Card title="Nhân công" size="small" className="shadow-sm">
                             <Table
                                 columns={laborColumns}
@@ -946,16 +734,12 @@ const AccountHome: React.FC = () => {
                                 Chi phí nhân công: {formatCurrency(laborTotal)}
                             </div>
                         </Card>
+                        
+                        {/* Tổng chi phí */}
                         <Card size="small" className="shadow-sm">
-                            {discountEligible && appliedDiscountValue > 0 && (
-                                <div className="flex justify-between items-center text-sm mt-2 text-green-600">
-                                    <span>Giảm giá 5% cho đơn đầu tiên</span>
-                                    <strong>-{formatCurrency(appliedDiscountValue)}</strong>
-                                </div>
-                            )}
                             <div className="flex justify-between items-center text-base">
-                                <span>Tổng chi phí</span>
-                                <strong>{formatCurrency(discountedGrandTotal)}</strong>
+                                <span>Tổng chi phí cần thanh toán</span>
+                                <strong>{formatCurrency(grandTotal)}</strong>
                             </div>
                         </Card>
                     </div>

@@ -11,47 +11,49 @@ import { useLocation } from 'react-router-dom';
 const { Header, Content } = Layout;
 const { Title } = Typography;
 
-
-
 const InspectorHome: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const [userName, setUserName] = useState('');
-    const [orders, setOrders] = useState<any[]>([]);
-    const [proposalOrders, setProposalOrders] = useState<any[]>([]);
-    const [inspectedOrders, setInspectedOrders] = useState<any[]>([]);
-    const [loadingUser, setLoadingUser] = useState(true);
-    const [loadingOrders, setLoadingOrders] = useState(true);
-    const [selectedKey, setSelectedKey] = useState<'orders' | 'proposal' | 'inspected'>('orders');
-    const [refreshing, setRefreshing] = useState(false);
+    const [userName, setUserName] = useState(''); // Lưu họ tên của Giám định viên hiện tại
+    const [orders, setOrders] = useState<any[]>([]); // Đơn hàng ở tab "Chờ tiếp nhận"
+    const [proposalOrders, setProposalOrders] = useState<any[]>([]); // Đơn hàng ở tab "Chờ đề xuất" (đang giám định, đề xuất lại...)
+    const [inspectedOrders, setInspectedOrders] = useState<any[]>([]); // Đơn hàng ở tab "Đã giám định" (lịch trình tiếp theo)
+    const [loadingUser, setLoadingUser] = useState(true); // Trạng thái tải tên người dùng
+    const [loadingOrders, setLoadingOrders] = useState(true); // Trạng thái tải danh sách đơn hàng
+    const [selectedKey, setSelectedKey] = useState<'orders' | 'proposal' | 'inspected'>('orders'); // Quản lý Tab đang mở
+    const [refreshing, setRefreshing] = useState(false); // Trạng thái loading quay vòng khi làm mới danh sách
 
+    // Hàm phụ trợ chuẩn hóa chuỗi viết thường không dấu
     const normalize = (s: string) => {
         if (!s) return '';
         return String(s).toLowerCase().trim();
     };
 
+    /**
+     * Tải dữ liệu các đơn sửa chữa từ Firestore và phân chia về 3 Tab tương ứng
+     */
     const fetchOrdersData = async () => {
-        const uid = sessionStorage.getItem('uid');
+        const uid = sessionStorage.getItem('uid'); // Lấy ID giám định viên
         if (!uid) return;
 
         try {
             setRefreshing(true);
             const ordersRef = collection(db, 'repairOrder');
 
-            // Lấy tất cả đơn hàng để xử lý dấu cách thừa trong status
+            // 1. Tải toàn bộ đơn sửa chữa từ Firestore
             const allOrdersSnapshot = await getDocs(ordersRef);
 
-            // Đơn chờ tiếp nhận - filter để xử lý dấu cách thừa
+            // 2. Lọc đơn "Chờ tiếp nhận": trạng thái là "Chờ giám định"
             const waitingOrders = allOrdersSnapshot.docs.filter(doc => {
                 const status = doc.data().Status;
                 return status && status.trim() === 'Chờ giám định';
             });
 
+            // Tiến hành map nạp thông tin tên Tàu & tên Xưởng tương ứng cho đơn chờ nhận
             const ordersData = await Promise.all(waitingOrders.map(async (docSnap) => {
                 const order = docSnap.data();
                 const createdAt = order.StartDate?.toDate ? order.StartDate.toDate().toLocaleDateString('vi-VN') : '';
 
-                // Lấy tên tàu và xưởng
                 let shipName = 'Không xác định';
                 let workshopName = 'Không xác định';
 
@@ -79,7 +81,8 @@ const InspectorHome: React.FC = () => {
             }));
             setOrders(ordersData);
 
-            // Đơn chờ đề xuất phương án / yêu cầu đề xuất lại / đã đề xuất: include multiple statuses
+            // 3. Lọc đơn "Chờ đề xuất": Trạng thái thuộc ['Đang giám định', 'Yêu cầu đề xuất lại', 'Đã đề xuất phương án']
+            // Và đơn này đã được phân bổ cho Giám định viên này phụ trách (inspectorId === uid)
             const targetStatuses = ['Đang giám định', 'Yêu cầu đề xuất lại', 'Đã đề xuất phương án'];
             const proposalOrders = allOrdersSnapshot.docs.filter(doc => {
                 const order = doc.data();
@@ -91,7 +94,6 @@ const InspectorHome: React.FC = () => {
                 const order = docSnap.data();
                 const createdAt = order.StartDate?.toDate ? order.StartDate.toDate().toLocaleDateString('vi-VN') : '';
 
-                // Lấy tên tàu và xưởng
                 let shipName = 'Không xác định';
                 let workshopName = 'Không xác định';
 
@@ -119,11 +121,11 @@ const InspectorHome: React.FC = () => {
             }));
             setProposalOrders(proposalData);
 
-            // Inspected orders: those NOT in the excluded list and assigned to this inspector
+            // 4. Lọc đơn "Đã giám định": Đã gán cho GĐV này phụ trách VÀ trạng thái KHÔNG NẰM trong danh sách chờ ('Chờ giám định', 'Đang giám định'...)
             const excludedList = ['Chờ giám định', 'Đang giám định', 'Yêu cầu đề xuất lại', 'Đã đề xuất phương án'].map(normalize);
             const inspectedDocs = allOrdersSnapshot.docs.filter(docSnap => {
                 const order = docSnap.data();
-                const status = normalize(order?.Status || order?.status || '');
+                const status = normalize(order?.Status || '');
                 return order?.inspectorId === uid && status && !excludedList.includes(status);
             });
 
@@ -161,9 +163,7 @@ const InspectorHome: React.FC = () => {
         }
     };
 
-
-
-    // Xử lý URL parameters để set tab đúng
+    // Điều hướng chọn Tab bằng Query Parameter (?tab=...)
     useEffect(() => {
         const urlParams = new URLSearchParams(location.search);
         const tab = urlParams.get('tab');
@@ -172,6 +172,7 @@ const InspectorHome: React.FC = () => {
         else setSelectedKey('orders');
     }, [location.search]);
 
+    // Lần đầu nạp trang: Lấy thông tin họ tên của Giám định viên
     useEffect(() => {
         const fetchData = async () => {
             const uid = sessionStorage.getItem('uid');
@@ -181,7 +182,6 @@ const InspectorHome: React.FC = () => {
             }
 
             try {
-                // Lấy thông tin giám định viên
                 const usersRef = collection(db, 'users');
                 const userQuery = query(usersRef, where('__name__', '==', uid));
                 const userSnapshot = await getDocs(userQuery);
@@ -191,8 +191,6 @@ const InspectorHome: React.FC = () => {
                     setUserName(u.fullName || u.username || 'Không có tên');
                 }
 
-
-                // Fetch orders data
                 await fetchOrdersData();
             } catch (error) {
                 message.error('Lỗi khi tải dữ liệu!');
@@ -204,7 +202,7 @@ const InspectorHome: React.FC = () => {
         fetchData();
     }, [navigate]);
 
-    // Cột cho tab Tiếp nhận đơn
+    // Cột của bảng Tab 1: Tiếp nhận đơn hàng mới
     const columnsAccept = [
         {
             title: 'STT',
@@ -242,7 +240,7 @@ const InspectorHome: React.FC = () => {
                 <Button
                     type="default"
                     className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
-                    onClick={() => navigate(`/inspector/orders/${record.id}`)}
+                    onClick={() => navigate(`/inspector/orders/${record.id}`)} // Chuyển trang tiếp nhận chi tiết
                 >
                     Tiếp nhận đơn
                 </Button>
@@ -250,9 +248,7 @@ const InspectorHome: React.FC = () => {
         },
     ];
 
-
-
-    // Cột cho tab Đề xuất phương án
+    // Cột của bảng Tab 2: Lập phương án đề xuất kỹ thuật/vật liệu/ngày công
     const columnsProposal = [
         {
             title: 'STT',
@@ -270,7 +266,7 @@ const InspectorHome: React.FC = () => {
                 if (st === 'Đang giám định') color = 'orange';
                 else if (st === 'Yêu cầu đề xuất lại') color = 'red';
                 else if (st === 'Đã đề xuất phương án') color = 'green';
-                return <Tag color={color}>{st}</Tag>;
+                return <Tag color={color}>{st}</Tag>; // Hiển thị nhãn màu sắc
             }
         },
         {
@@ -308,7 +304,7 @@ const InspectorHome: React.FC = () => {
                     <Button
                         type="default"
                         className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
-                        onClick={() => navigate(`/inspector/proposal/${record.id}`)}
+                        onClick={() => navigate(`/inspector/proposal/${record.id}`)} // Chuyển trang viết phương án
                     >
                         {label}
                     </Button>
@@ -317,7 +313,7 @@ const InspectorHome: React.FC = () => {
         },
     ];
 
-    // Cột cho tab Đã giám định (chỉ có hành động Xem)
+    // Cột của bảng Tab 3: Xem lại thông tin các đơn đã hoàn tất giám định
     const columnsInspected = [
         ...columnsProposal.filter((c: any) => c.key !== 'action'),
         {
@@ -327,7 +323,7 @@ const InspectorHome: React.FC = () => {
                 <Button
                     type="default"
                     className="!p-0 !text-blue-600 !border-blue-600 !bg-white hover:!bg-blue-50"
-                    onClick={() => navigate(`/inspector/done/${record.id}`)}
+                    onClick={() => navigate(`/inspector/done/${record.id}`)} // Chuyển trang xem chi tiết kết quả đã duyệt
                 >
                     Xem
                 </Button>
@@ -348,6 +344,7 @@ const InspectorHome: React.FC = () => {
             loadingUser={loadingUser}
         >
             <div className="m-0 p-0">
+                {/* RENDERING THE 3 DIFFERENT VIEWS ACCORDING TO THE ACTIVE TAB KEY */}
                 {selectedKey === 'orders' && (
                     <>
                         <Title level={4}>Danh sách đơn hàng chờ tiếp nhận</Title>
@@ -398,4 +395,5 @@ const InspectorHome: React.FC = () => {
         </InspectorLayout>
     );
 };
+
 export default InspectorHome;

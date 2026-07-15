@@ -12,7 +12,7 @@ import {
     Card,
     Popconfirm,
     Input,
-    Modal, // Import Modal từ Ant Design
+    Modal,
 } from 'antd';
 import {
     collection,
@@ -34,13 +34,14 @@ import Invoice from '../../components/Customer/Invoice';
 const { Title } = Typography;
 
 const OrderDetail: React.FC = () => {
-    const { state } = useLocation();
-    const { id } = useParams();
+    const { state } = useLocation(); // Nhận dữ liệu truyền từ trang Home qua React Router State (nếu có)
+    const { id } = useParams(); // Lấy ID của đơn sửa chữa trên URL
     const navigate = useNavigate();
 
-    const [orderData, setOrderData] = useState<any>(state || null);
-    const [loading, setLoading] = useState(!state);
+    const [orderData, setOrderData] = useState<any>(state || null); // Lưu trữ dữ liệu đơn sửa chữa
+    const [loading, setLoading] = useState(!state); // Trạng thái tải đơn hàng từ Firestore (nếu state chưa có)
 
+    // Các thông tin bổ trợ hiển thị
     const [shipName, setShipName] = useState('');
     const [workshopName, setWorkshopName] = useState('');
     const [workshopAddress, setWorkshopAddress] = useState('');
@@ -50,27 +51,26 @@ const OrderDetail: React.FC = () => {
     const [userName, setUserName] = useState('');
     const [userAddress, setUserAddress] = useState('');
     const [userPhone, setUserPhone] = useState('');
-    const [referredByUid, setReferredByUid] = useState('');
-    const [referredByCode, setReferredByCode] = useState('');
-    const [isFirstOrder, setIsFirstOrder] = useState(true);
     
     const [loadingUser, setLoadingUser] = useState(true);
 
-    const [canceling, setCanceling] = useState(false);
-    const [accepting, setAccepting] = useState(false);
+    const [canceling, setCanceling] = useState(false); // Trạng thái spinner khi khách ấn Hủy đơn
+    const [accepting, setAccepting] = useState(false); // Trạng thái spinner đồng ý phương án sửa chữa
 
-    const [reproposalModalVisible, setReproposalModalVisible] = useState(false);
+    const [reproposalModalVisible, setReproposalModalVisible] = useState(false); // Modal yêu cầu đề xuất lại phương án
     const [reproposalSubmitting, setReproposalSubmitting] = useState(false);
-    const [proposalModalVisible, setProposalModalVisible] = useState(false);
+    const [proposalModalVisible, setProposalModalVisible] = useState(false); // Modal xem phương án đề xuất của giám định viên
 
-    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
-    const [materialLines, setMaterialLines] = useState<any[]>([]);
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]); // Catalog mẫu vật tư
+    const [materialLines, setMaterialLines] = useState<any[]>([]); // Dòng vật tư đã nạp cho đơn hàng này
 
-    const [isInvoiceVisible, setIsInvoiceVisible] = useState(false); // State để quản lý hiển thị hóa đơn
+    const [isInvoiceVisible, setIsInvoiceVisible] = useState(false); // Quản lý đóng/mở Modal hiển thị hóa đơn thanh toán PDF
 
+    // Định dạng hiển thị tiền tệ
     const formatMoney = (value: number) =>
         value.toLocaleString('vi-VN') + ' đ';
 
+    // Hàm chuẩn hóa chuỗi phục vụ so sánh không dấu viết thường
     const normalize = (str: any) =>
         String(str || '')
             .normalize('NFD')
@@ -78,11 +78,11 @@ const OrderDetail: React.FC = () => {
             .toLowerCase()
             .trim();
 
-    // Hàm để mở và đóng modal hóa đơn
+    // Mở và đóng modal hóa đơn
     const showInvoice = () => setIsInvoiceVisible(true);
     const hideInvoice = () => setIsInvoiceVisible(false);
 
-    // 1. Load user + order
+    // 1. Tải thông tin cá nhân khách hàng
     useEffect(() => {
         const fetchOrder = async () => {
             const uid = sessionStorage.getItem('uid');
@@ -98,28 +98,14 @@ const OrderDetail: React.FC = () => {
                 if (!customerSnapshot.empty) {
                     const custData = customerSnapshot.docs[0].data();
                     setUserName(custData.fullName || 'Khách hàng');
-                    setUserAddress(custData.address || ''); // Lấy địa chỉ
-                    setUserPhone(custData.phoneNumber || custData.phone || ''); // Lấy số điện thoại
-                    setReferredByUid(custData.referredByUid || '');
-                    setReferredByCode(custData.referredByCode || '');
-
-                    // Check if this is the first order
-                    try {
-                        const completedOrdersQuery = query(
-                            collection(db, 'repairOrder'),
-                            where('uid', '==', uid),
-                            where('Status', '==', 'Hoàn thành')
-                        );
-                        const completedSnap = await getDocs(completedOrdersQuery);
-                        setIsFirstOrder(completedSnap.size === 0);
-                    } catch (e) {
-                        console.warn('Could not check completed orders:', e);
-                    }
+                    setUserAddress(custData.address || '');
+                    setUserPhone(custData.phoneNumber || '');
                 }
             } catch {}
 
             setLoadingUser(false);
 
+            // Nếu người dùng truy cập trực tiếp từ URL, tiến hành fetch chi tiết đơn sửa chữa từ Firestore
             if (!state && id) {
                 try {
                     setLoading(true);
@@ -136,7 +122,7 @@ const OrderDetail: React.FC = () => {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/');
                     }
-                } catch {
+                } catch (error) {
                     message.error('Lỗi tải đơn hàng.');
                 } finally {
                     setLoading(false);
@@ -147,7 +133,7 @@ const OrderDetail: React.FC = () => {
         fetchOrder();
     }, [state, id, navigate]);
 
-    // 2. Load catalog vật liệu
+    // 2. Tải danh mục vật liệu mẫu từ Firestore làm cơ sở quy đổi tên
     useEffect(() => {
         const loadCatalog = async () => {
             try {
@@ -158,7 +144,7 @@ const OrderDetail: React.FC = () => {
         loadCatalog();
     }, []);
 
-    // 3. Load vật liệu đơn
+    // 3. Tải danh sách vật tư đã được gán trực tiếp của đơn hàng này
     useEffect(() => {
         const loadExisting = async () => {
             if (!orderData?.id) return;
@@ -196,7 +182,7 @@ const OrderDetail: React.FC = () => {
         loadExisting();
     }, [orderData, materialsCatalog]);
 
-    // 4. Load ship + workshop
+    // 4. Lấy thông tin chi tiết tên Tàu và xưởng sửa chữa
     useEffect(() => {
         const fetchNames = async () => {
             if (!orderData) return;
@@ -218,9 +204,9 @@ const OrderDetail: React.FC = () => {
                     if (wsSnap.exists()) {
                         const wsData = wsSnap.data();
                         setWorkshopName(wsData.name || 'Không xác định');
-                        setWorkshopAddress(wsData.address || ''); // Lấy địa chỉ xưởng
-                        setWorkshopPhone(wsData.phoneNumber || wsData.phone || ''); // Lấy sđt xưởng
-                        setWorkshopEmail(wsData.email || ''); // Lấy email xưởng
+                        setWorkshopAddress(wsData.address || '');
+                        setWorkshopPhone(wsData.phoneNumber || '');
+                        setWorkshopEmail(wsData.email || '');
                     } else {
                         setWorkshopName(orderData.workshopName || 'Không xác định');
                     }
@@ -235,22 +221,17 @@ const OrderDetail: React.FC = () => {
         fetchNames();
     }, [orderData]);
 
-    // 5. Tính chi phí
+    // 5. Tổng hợp các chi phí vật tư và nhân công
     const materialsCost = materialLines.reduce(
         (s, x) => s + (Number(x.lineTotal) || 0),
         0
     );
 
-    const savedMaterialsCost =
-        Number(orderData?.materialsCost) || materialsCost;
+    const savedMaterialsCost = Number(orderData?.materialsCost) || materialsCost;
+    const savedLaborCost = Number(orderData?.laborCost) || 0;
+    const savedTotalCost = Number(orderData?.totalCost) || (savedMaterialsCost + savedLaborCost);
 
-    const savedLaborCost =
-        Number(orderData?.laborCost) || 0;
-
-    const savedTotalCost =
-        Number(orderData?.totalCost) || (savedMaterialsCost + savedLaborCost);
-
-    // 6. Loading guard
+    // Dừng hiển thị nếu đang tải
     if (loading || !orderData) {
         return (
             <div className="p-6">
@@ -261,21 +242,12 @@ const OrderDetail: React.FC = () => {
 
     const { createdAt, Status, description } = orderData;
 
-    // Calculate discount for first order with referral
-    const shouldApplyDiscount = referredByUid && isFirstOrder && normalize(Status) === normalize('đã tạo hóa đơn');
-    const discountAmount = shouldApplyDiscount ? Math.round(savedTotalCost * 0.05) : 0;
-    const discountedTotalCost = savedTotalCost - discountAmount;
-
-    const proposalText: string =
-        orderData?.repairplan ||
-        orderData?.proposal ||
-        orderData?.repairPlan ||
-        orderData?.RepairPlan ||
-        '';
+    const proposalText: string = orderData?.repairplan || ''; // Nội dung văn bản đề xuất kỹ thuật
 
     const statusNorm = normalize(Status);
     const isProposed = statusNorm === normalize('đã đề xuất phương án');
 
+    // Các trạng thái được phép "Hủy đơn"
     const showCancelFor = new Set([
         normalize('chờ giám định'),
         normalize('đang giám định'),
@@ -284,11 +256,12 @@ const OrderDetail: React.FC = () => {
     ]);
     const canCancel = showCancelFor.has(statusNorm);
 
-    // 7. Actions
+    // 7. Đồng ý với phương án đề xuất của giám định viên
     const handleAcceptRepair = async () => {
         if (!id) return;
         setAccepting(true);
         try {
+            // Cập nhật trạng thái đơn sửa chữa thành "Sắp xếp lịch sửa chữa" để chuyển quyền qua cho chủ xưởng lập lịch
             await updateDoc(doc(db, 'repairOrder', id), {
                 Status: 'Sắp xếp lịch sửa chữa',
             });
@@ -301,10 +274,12 @@ const OrderDetail: React.FC = () => {
         }
     };
 
+    // Gửi yêu cầu sửa đổi lại phương án cho cán bộ giám định viên chỉnh sửa lại
     const handleRequestReproposal = async (text: string) => {
         if (!id) return;
         try {
             setReproposalSubmitting(true);
+            // Ghi nhận phản hồi và chuyển trạng thái về "Yêu cầu đề xuất lại"
             await updateDoc(doc(db, 'repairOrder', id), {
                 Status: 'Yêu cầu đề xuất lại',
                 CustomerAdjustmentRequest: {
@@ -324,10 +299,12 @@ const OrderDetail: React.FC = () => {
         }
     };
 
+    // Xử lý Hủy đơn sửa chữa
     const handleCancelOrder = async () => {
         if (!id) return;
         setCanceling(true);
         try {
+            // Xóa các vật tư liên kết nháp trước khi xóa đơn hàng để tránh rác database
             const existingQuery = query(
                 collection(db, 'repairordermaterial'),
                 where('RepairOrder_ID', '==', id)
@@ -340,6 +317,7 @@ const OrderDetail: React.FC = () => {
                 } catch (e) {}
             }
 
+            // Xóa tài liệu đơn sửa chữa trong collection 'repairOrder'
             await deleteDoc(doc(db, 'repairOrder', id));
             message.success('Đã xóa đơn hàng.');
             navigate('/');
@@ -350,7 +328,6 @@ const OrderDetail: React.FC = () => {
         }
     };
 
-    // 8. Render
     return (
         <CustomerLayout userName={userName} loadingUser={loadingUser}>
             <div className="flex justify-between items-center mb-4">
@@ -360,6 +337,7 @@ const OrderDetail: React.FC = () => {
                 <Button onClick={() => navigate(-1)}>Quay lại</Button>
             </div>
 
+            {/* Bảng thông tin thuộc tính đơn sửa chữa */}
             <Descriptions title="Thông tin đơn" bordered column={1}>
                 <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                 <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
@@ -374,7 +352,7 @@ const OrderDetail: React.FC = () => {
                 )}
             </Descriptions>
 
-            {/* Nút hiển thị hóa đơn */}
+            {/* Nút xem hóa đơn thanh toán PDF xuất hiện khi đơn ở trạng thái đã tạo hóa đơn */}
             {normalize(Status) === normalize('đã tạo hóa đơn') && (
                 <div className="mt-4 text-right">
                     <Button type="primary" onClick={showInvoice}>
@@ -383,13 +361,13 @@ const OrderDetail: React.FC = () => {
                 </div>
             )}
 
-            {/* Modal hiển thị hóa đơn */}
+            {/* Modal lớn chứa Hóa đơn xuất PDF */}
             <Modal
-                title={null} // Ẩn tiêu đề mặc định
+                title={null}
                 open={isInvoiceVisible}
                 onCancel={hideInvoice}
                 footer={null}
-                width={850} // Mở rộng modal để vừa hóa đơn
+                width={850}
                 style={{ top: 20 }}
             >
                 <Invoice
@@ -401,8 +379,7 @@ const OrderDetail: React.FC = () => {
                     createdAt={createdAt}
                     materialsCost={savedMaterialsCost}
                     laborCost={savedLaborCost}
-                    totalCost={discountedTotalCost}
-                    discount={discountAmount}
+                    totalCost={savedTotalCost}
                     customerName={userName}
                     customerAddress={userAddress}
                     customerPhone={userPhone}
@@ -417,6 +394,7 @@ const OrderDetail: React.FC = () => {
                 />
             </Modal>
 
+            {/* Khối các nút điều khiển duyệt phương án / hủy đơn */}
             {canCancel && (
                 <div className="mt-8 flex justify-end gap-3">
                     {isProposed && (
@@ -441,6 +419,7 @@ const OrderDetail: React.FC = () => {
                 </div>
             )}
 
+            {/* Modal hiển thị chi tiết phương án kỹ thuật và vật liệu/nhân viên đề xuất */}
             <RepairPlanModal
                 visible={proposalModalVisible}
                 onClose={() => setProposalModalVisible(false)}
@@ -456,6 +435,7 @@ const OrderDetail: React.FC = () => {
                 savedTotalCost={savedTotalCost}
             />
 
+            {/* Modal ghi chép phản hồi yêu cầu điều chỉnh từ khách hàng */}
             <ReproposalModal
                 visible={reproposalModalVisible}
                 submitting={reproposalSubmitting}

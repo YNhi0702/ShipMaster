@@ -6,6 +6,7 @@ import { db } from '../../firebase';
 import InspectorSidebar from '../../components/Inspector/InspectorSidebar';
 import InspectorLayout from '../../components/Inspector/InspectorLayout';
 
+// Bảng đơn giá nhân công cơ bản theo chuyên môn kỹ thuật của thợ
 const EXPERTISE_RATES: { [key: string]: number } = {
     'Thợ hàn / cơ khí vỏ tàu': 600000,
     'Thợ máy tàu': 800000,
@@ -13,16 +14,19 @@ const EXPERTISE_RATES: { [key: string]: number } = {
     'Thợ sơn / vệ sinh tàu': 450000,
 };
 
+/**
+ * Hàm tính toán đơn giá nhân công thực tế dựa theo Chuyên môn và Bậc tay nghề
+ */
 const getExpertiseRate = (expertise: string): number => {
-    if (!expertise) return 350000; // default fallback
+    if (!expertise) return 350000; // Đơn giá dự phòng mặc định nếu thợ chưa cập nhật chuyên môn
     const normalized = expertise.trim().toLowerCase();
     
-    // Tách chuyên môn và bậc năng lực (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
+    // Tách chuyên môn và bậc tay nghề (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
     const parts = normalized.split(' - ');
     const baseExp = parts[0] ? parts[0].trim() : '';
     const levelStr = parts[1] ? parts[1].trim() : '';
 
-    let baseRate = 350000; // default fallback
+    let baseRate = 350000;
     for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
         if (key.toLowerCase() === baseExp) {
             baseRate = rate;
@@ -31,30 +35,31 @@ const getExpertiseRate = (expertise: string): number => {
     }
 
     if (levelStr === 'bậc 1') {
-        return baseRate * 0.8;
+        return baseRate * 0.8; // Thợ bậc 1 hưởng 80% lương cơ bản
     } else if (levelStr === 'bậc 3') {
-        return baseRate * 1.25;
+        return baseRate * 1.25; // Thợ bậc 3 hưởng 125% lương cơ bản
     }
-    return baseRate; // mặc định Bậc 2
+    return baseRate; // Mặc định thợ bậc 2 hưởng 100%
 };
 
 const { Title } = Typography;
 
 const OrderDetailDone: React.FC = () => {
-    const { id } = useParams();
+    const { id } = useParams(); // Lấy ID đơn sửa chữa từ URL
     const navigate = useNavigate();
-    const [orderData, setOrderData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
+    const [orderData, setOrderData] = useState<any>(null); // Dữ liệu đơn sửa chữa
+    const [loading, setLoading] = useState(true); // Trạng thái tải dữ liệu chung
     const [shipName, setShipName] = useState('');
     const [shipInfo, setShipInfo] = useState<any | null>(null);
     const [workshopName, setWorkshopName] = useState('');
     const [employeeName, setEmployeeName] = useState('');
-    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
-    const [materialLines, setMaterialLines] = useState<any[]>([]);
-    const [userName, setUserName] = useState('');
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]); // Catalog danh mục vật tư mẫu
+    const [materialLines, setMaterialLines] = useState<any[]>([]); // Danh sách vật tư của đơn
+    const [userName, setUserName] = useState(''); // Tên Giám định viên đăng nhập
     const [loadingUser, setLoadingUser] = useState(true);
-    const [laborLines, setLaborLines] = useState<any[]>([]);
+    const [laborLines, setLaborLines] = useState<any[]>([]); // Danh sách nhân công gán cho đơn này
 
+    // Lần đầu tải trang: Đọc thông tin Giám định viên và thông tin cơ bản của đơn sửa chữa
     useEffect(() => {
         const fetchData = async () => {
             const uid = sessionStorage.getItem('uid');
@@ -64,6 +69,7 @@ const OrderDetailDone: React.FC = () => {
             }
 
             try {
+                // Tải thông tin cá nhân của giám định viên hiển thị trên Header
                 const employeesRef = collection(db, 'employees');
                 const empQuery = query(employeesRef, where('__name__', '==', uid));
                 const empSnapshot = await getDocs(empQuery);
@@ -93,6 +99,7 @@ const OrderDetailDone: React.FC = () => {
         fetchData();
     }, [id, navigate]);
 
+    // Tải thông tin tên Tàu, tên Xưởng và tên Giám định viên liên kết
     useEffect(() => {
         const fetchNames = async () => {
             if (!orderData) return;
@@ -141,7 +148,7 @@ const OrderDetailDone: React.FC = () => {
         fetchNames();
     }, [orderData]);
 
-    // load material catalog and repair order materials for display
+    // Tải thông tin chi tiết vật tư đã dùng
     useEffect(() => {
         const loadMaterials = async () => {
             if (!orderData?.id) return;
@@ -180,7 +187,7 @@ const OrderDetailDone: React.FC = () => {
         loadMaterials();
     }, [orderData]);
 
-    // load repair order labor lines for display
+    // Tải danh sách nhân công sửa chữa gán cho đơn hàng này
     useEffect(() => {
         const loadLabor = async () => {
             if (!orderData?.id) return;
@@ -197,6 +204,7 @@ const OrderDetailDone: React.FC = () => {
                             employeeName: data.EmployeeName || data.employeeName || '',
                             description: data.Description || data.description || '',
                             days,
+                            expertise: data.Expertise || data.expertise || '',
                         };
                     });
                     setLaborLines(lines);
@@ -210,16 +218,16 @@ const OrderDetailDone: React.FC = () => {
         loadLabor();
     }, [orderData]);
 
+    // Tính toán chi phí dự toán hiển thị trên giao diện
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
     const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
 
     if (loading || !orderData) return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
 
-    const { createdAt, Status, description, imageList = {}, repairplan, proposal } = orderData;
+    const { createdAt, Status, description, imageList = {}, repairplan } = orderData;
 
     return (
         <InspectorLayout
-            // make this page inherit the inspector layout and highlight the "Đã giám định" tab
             selectedKey="inspected"
             onSelect={(key) => {
                 if (key === 'orders') navigate('/inspector');
@@ -234,6 +242,7 @@ const OrderDetailDone: React.FC = () => {
                 <Button onClick={() => navigate(-1)}>Quay lại</Button>
             </div>
 
+            {/* Bảng thuộc tính thông tin chi tiết */}
             <Descriptions title="Thông tin đơn" bordered column={1}>
                 <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
                 <Descriptions.Item label="Trạng thái">{Status}</Descriptions.Item>
@@ -241,7 +250,7 @@ const OrderDetailDone: React.FC = () => {
                 <Descriptions.Item label="Xưởng">{workshopName}</Descriptions.Item>
                 {orderData.description && <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>}
 
-                {/* Ship detailed info (if available) */}
+                {/* Thông số kỹ thuật của Tàu (nếu có) */}
                 {shipInfo?.registration_number && (
                     <Descriptions.Item label="Số đăng ký">{shipInfo.registration_number}</Descriptions.Item>
                 )}
@@ -274,12 +283,13 @@ const OrderDetailDone: React.FC = () => {
                 )}
             </Descriptions>
 
-            {(repairplan || proposal) && (
+            {/* Chi tiết phương án đã được duyệt */}
+            {repairplan && (
                 <div className="mt-8 max-w-xl">
                     <Title level={4}>Phương án đã đề xuất</Title>
-                    <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line">{repairplan || proposal}</div>
+                    <div className="bg-gray-50 p-4 rounded border border-gray-200 whitespace-pre-line">{repairplan}</div>
 
-                    {/* Materials breakdown (if any) */}
+                    {/* Chi tiết vật tư đề xuất (nếu có) */}
                     {materialLines.length > 0 && (
                         <Card size="small" title="Vật liệu đề xuất" className="mt-4">
                             <Row gutter={8} className="mb-2 font-medium">
@@ -308,19 +318,19 @@ const OrderDetailDone: React.FC = () => {
                         </Card>
                     )}
 
-                    {/* Labor breakdown (if any) */}
+                    {/* Chi tiết nhân công thợ đề xuất (nếu có) */}
                     {laborLines.length > 0 && (
                         <Card size="small" title="Nhân công đề xuất" className="mt-4">
                             <Row gutter={8} className="mb-2 font-medium">
                                 <Col span={8}><div>Nhân viên</div></Col>
-                                    <Col span={8}><div>Số ngày</div></Col>
-                                    <Col span={8}><div>Chi phí</div></Col>
+                                <Col span={8}><div>Số ngày</div></Col>
+                                <Col span={8}><div>Chi phí</div></Col>
                             </Row>
                             {laborLines.map((line, idx) => (
                                 <Row key={line.id || idx} gutter={8} className="mb-2">
                                     <Col span={8}><div style={{ paddingTop: 6 }}>{line.employeeName || line.employeeId || '-'}</div></Col>
-                                        <Col span={8}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
-                                        <Col span={8}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div></Col>
+                                    <Col span={8}><div style={{ paddingTop: 6 }}>{line.days}</div></Col>
+                                    <Col span={8}><div style={{ paddingTop: 6 }}>{((Number(line.days)||0)*getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div></Col>
                                 </Row>
                             ))}
                             <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
@@ -333,6 +343,7 @@ const OrderDetailDone: React.FC = () => {
                 </div>
             )}
 
+            {/* Hình ảnh hỏng hóc được đính kèm */}
             {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
                 <div className="mt-6">
                     <Title level={4}>Hình ảnh</Title>

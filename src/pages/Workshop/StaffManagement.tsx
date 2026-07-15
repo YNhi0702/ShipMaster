@@ -6,35 +6,40 @@ import { db } from '../../firebase';
 
 const { Option } = Select;
 
+// Định nghĩa Interface dữ liệu nhân viên
 interface StaffRecord {
-    id?: string;
-    fullName?: string; // display name (UserName)
-    phone?: string;
-    email?: string;
-    expertise?: string; // Base Expertise field
-    level?: string;     // Level field parsed from Expertise
-    roleId?: any; // Role_ID
-    workShopID?: string; // workShopID field in employees
+    id?: string;           // ID tài liệu trong collection 'employees'
+    fullName?: string;     // Tên nhân viên (UserName)
+    phone?: string;        // Số điện thoại
+    email?: string;        // Địa chỉ email
+    expertise?: string;    // Chuyên môn cơ bản (Ví dụ: Thợ máy tàu)
+    level?: string;        // Bậc tay nghề (Bậc 1, Bậc 2, Bậc 3)
+    roleId?: any;          // Role ID phân quyền
+    workShopID?: string;   // ID xưởng nơi nhân viên làm việc
     createdAt?: any;
-    rawExpertise?: string; // original Expertise string
+    rawExpertise?: string; // Chuỗi Expertise gốc gộp (Ví dụ: "Thợ máy tàu - Bậc 2")
 }
 
+// Định nghĩa Interface Xưởng sửa chữa
 interface Workshop {
     id: string;
     name: string;
 }
 
 const StaffManagement: React.FC = () => {
-    const [staff, setStaff] = useState<StaffRecord[]>([]);
-    const [workshops, setWorkshops] = useState<Workshop[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [modalOpen, setModalOpen] = useState(false);
-    const [saving, setSaving] = useState(false);
-    const [editing, setEditing] = useState<StaffRecord | null>(null);
+    const [staff, setStaff] = useState<StaffRecord[]>([]); // Danh sách nhân viên thợ
+    const [workshops, setWorkshops] = useState<Workshop[]>([]); // Danh sách các xưởng sửa chữa
+    const [loading, setLoading] = useState<boolean>(true); // Trạng thái tải danh sách
+    const [modalOpen, setModalOpen] = useState(false); // Trạng thái ẩn/hiện Modal CRUD
+    const [saving, setSaving] = useState(false); // Trạng thái spinner khi ấn lưu nhân sự
+    const [editing, setEditing] = useState<StaffRecord | null>(null); // Bản ghi nhân viên đang sửa (null nếu là thêm mới)
 
-    const [form] = Form.useForm();
-    const [selectedWorkshop, setSelectedWorkshop] = useState<string>('all');
+    const [form] = Form.useForm(); // Quản lý dữ liệu Form
+    const [selectedWorkshop, setSelectedWorkshop] = useState<string>('all'); // Bộ lọc danh sách thợ theo xưởng
 
+    /**
+     * Tải danh sách nhân sự từ collection 'employees'
+     */
     const fetchStaff = async () => {
         try {
             setLoading(true);
@@ -42,20 +47,22 @@ const StaffManagement: React.FC = () => {
             const rows = snap.docs.map((d) => {
                 const data = d.data() as any;
                 const rawExp = data.Expertise || data.expertise || '';
+                
+                // Tách chuỗi chuyên môn động (Ví dụ: "Thợ điện tàu - Bậc 3" -> "Thợ điện tàu" và "Bậc 3")
                 const parts = rawExp.split(' - ');
                 const baseExp = parts[0] ? parts[0].trim() : '';
-                const lvl = parts[1] ? parts[1].trim() : 'Bậc 2';
+                const lvl = parts[1] ? parts[1].trim() : 'Bậc 2'; // Mặc định là Bậc 2
 
                 return {
                     id: d.id,
                     fullName: data.UserName || data.fullName || data.name || '',
-                    phone: data.Phone || data.phone || data.mobile || data.PhoneNumber || '',
+                    phone: data.Phone || data.PhoneNumber || '',
                     email: data.Email || data.email || '',
                     expertise: baseExp,
                     level: lvl,
-                    roleId: (data.Role_ID ?? data.roleId ?? data.Role) || null,
-                    workShopID: data.workShopID || data.workShopId || data.workshopId || data.workshop || null,
-                    createdAt: data.createdAt || data.created_at || null,
+                    roleId: (data.Role_ID ?? data.roleId) || null,
+                    workShopID: data.workShopID || data.workShopId || data.workshopId || null,
+                    createdAt: data.createdAt || null,
                     rawExpertise: rawExp,
                     raw: data,
                 } as StaffRecord;
@@ -69,6 +76,9 @@ const StaffManagement: React.FC = () => {
         }
     };
 
+    /**
+     * Tải danh sách xưởng để đưa vào select box chọn xưởng cho nhân sự
+     */
     const fetchWorkshops = async () => {
         try {
             const snap = await getDocs(collection(db, 'workShop'));
@@ -82,18 +92,21 @@ const StaffManagement: React.FC = () => {
         }
     };
 
+    // Tự động tải danh sách thợ và xưởng khi mở phân hệ quản lý nhân sự
     useEffect(() => {
         fetchStaff();
         fetchWorkshops();
     }, []);
 
+    // Nhấp nút "Thêm nhân sự" để mở form trắng
     const openAdd = () => {
         setEditing(null);
         form.resetFields();
-        form.setFieldsValue({ level: 'Bậc 2' });
+        form.setFieldsValue({ level: 'Bậc 2' }); // Đặt mặc định bậc thợ là Bậc 2
         setModalOpen(true);
     };
 
+    // Nhấp nút "Chỉnh sửa" để mở form nạp thông tin nhân sự được chọn
     const openEdit = (record: StaffRecord) => {
         setEditing(record);
         form.setFieldsValue({
@@ -107,6 +120,7 @@ const StaffManagement: React.FC = () => {
         setModalOpen(true);
     };
 
+    // Xóa nhân viên khỏi database
     const handleDelete = async (id?: string) => {
         if (!id) return;
         try {
@@ -119,31 +133,36 @@ const StaffManagement: React.FC = () => {
         }
     };
 
+    // Lưu thông tin nhân viên (Thêm mới hoặc Cập nhật)
     const handleSave = async () => {
         try {
             const values = await form.validateFields();
             setSaving(true);
+            
+            // Hợp nhất chuyên môn và bậc tay nghề thành 1 chuỗi để lưu vào Firestore (Ví dụ: "Thợ máy tàu - Bậc 3")
             const finalExpertise = `${values.expertise} - ${values.level || 'Bậc 2'}`;
 
             if (editing && editing.id) {
+                // Thực hiện cập nhật
                 const ref = doc(db, 'employees', editing.id);
                 await updateDoc(ref, {
                     UserName: values.fullName || '',
                     Phone: values.phone || '',
                     Email: values.email || '',
                     Expertise: finalExpertise,
-                    Role_ID: 5,
+                    Role_ID: 5, // Gán cứng Role_ID = 5 đại diện cho Thợ sửa chữa
                     workShopID: values.workshopSelect || null,
                     updatedAt: serverTimestamp(),
                 });
                 message.success('Cập nhật nhân sự thành công.');
             } else {
+                // Thực hiện thêm mới thợ vào collection 'employees'
                 await addDoc(collection(db, 'employees'), {
                     UserName: values.fullName || '',
                     Phone: values.phone || '',
                     Email: values.email || '',
                     Expertise: finalExpertise,
-                    Role_ID: 5,
+                    Role_ID: 5, // Thợ kỹ thuật
                     workShopID: values.workshopSelect || null,
                     createdAt: serverTimestamp(),
                 });
@@ -154,7 +173,7 @@ const StaffManagement: React.FC = () => {
             form.resetFields();
             await fetchStaff();
         } catch (error: any) {
-            if (error.errorFields) return; // validation error
+            if (error.errorFields) return; // Nếu form chưa nhập đủ thì bỏ qua
             console.error('Save failed', error);
             message.error('Không thể lưu nhân sự.');
         } finally {
@@ -162,6 +181,7 @@ const StaffManagement: React.FC = () => {
         }
     };
 
+    // Định nghĩa các cột của bảng danh sách thợ
     const columns = [
         { title: 'Họ tên', dataIndex: 'fullName', key: 'fullName' },
         { title: 'Số điện thoại', dataIndex: 'phone', key: 'phone' },
@@ -171,6 +191,7 @@ const StaffManagement: React.FC = () => {
             title: 'Năng lực / Bậc',
             key: 'level',
             render: (_: any, record: StaffRecord) => (
+                // Hỗ trợ cập nhật nhanh Bậc thợ trực tiếp tại cột mà không cần mở modal
                 <Select
                     value={record.level || 'Bậc 2'}
                     style={{ width: 110 }}
@@ -221,10 +242,11 @@ const StaffManagement: React.FC = () => {
                 <div className="p-6"><Spin /> Đang tải...</div>
             ) : (
                 <>
+                    {/* Bộ lọc nhân viên theo từng xưởng sửa chữa cụ thể */}
                     <div className="mb-4">
                         <Select
                             showSearch
-                            placeholder="Tất cả"
+                            placeholder="Tất cả xưởng"
                             style={{ width: 320 }}
                             optionFilterProp="children"
                             value={selectedWorkshop}
@@ -241,6 +263,7 @@ const StaffManagement: React.FC = () => {
                         </Select>
                     </div>
 
+                    {/* Bảng hiển thị danh sách thợ sửa chữa */}
                     <Table
                         columns={columns}
                         dataSource={
@@ -253,6 +276,7 @@ const StaffManagement: React.FC = () => {
                 </>
             )}
 
+            {/* Modal CRUD thêm / sửa thông tin nhân viên */}
             <Modal
                 title={editing ? 'Sửa nhân sự' : 'Thêm nhân sự'}
                 open={modalOpen}

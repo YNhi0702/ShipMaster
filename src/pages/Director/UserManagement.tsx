@@ -7,7 +7,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { httpsCallable } from 'firebase/functions';
 import { db, auth as mainAuth, functions } from '../../firebase';
 
-// Cấu hình Firebase
+// Cấu hình Firebase để khởi tạo App phụ
 const firebaseConfig = {
     apiKey: "AIzaSyAwe46FT7movyzNSXNPNpb7DVkXzn2-AKc",
     authDomain: "shipmaster-fb2eb.firebaseapp.com",
@@ -18,7 +18,13 @@ const firebaseConfig = {
     measurementId: "G-8LKJW3RCG6"
 };
 
-// Khởi tạo app phụ để tạo user mà không bị logout
+/**
+ * Thuật toán Khởi tạo app phụ SecondaryApp:
+ * Khi admin tạo tài khoản cho nhân viên mới, Firebase Auth mặc định sẽ tự động đăng nhập (sign in) 
+ * vào tài khoản mới tạo và đá admin ra ngoài (logout).
+ * Để giải quyết vấn đề này, ta khởi tạo một thực thể Firebase App phụ (SecondaryApp) độc lập 
+ * để thực hiện lệnh tạo Auth mà không ảnh hưởng đến phiên đăng nhập hiện tại của Admin.
+ */
 const getSecondaryAuth = () => {
     const appName = "SecondaryApp";
     let secondaryApp;
@@ -26,36 +32,39 @@ const getSecondaryAuth = () => {
     const existingApp = apps.find(app => app.name === appName);
     
     if (existingApp) {
-        secondaryApp = existingApp;
+        secondaryApp = existingApp; // Sử dụng app phụ đã tạo trước đó
     } else {
-        secondaryApp = initializeApp(firebaseConfig, appName);
+        secondaryApp = initializeApp(firebaseConfig, appName); // Khởi tạo mới
     }
     
     return getAuth(secondaryApp);
 };
 
+// Interface của người dùng trong hệ thống
 interface UserData {
-    id: string;
-    uid: string;
+    id: string; // ID tài liệu Firestore
+    uid: string; // UID định danh người dùng trong Firebase Auth
     email: string;
     phone: string;
-    role: string;
+    role: string; // Vai trò (director, accountant, inspector, workshop_owner, customer)
     createdAt?: any;
 }
 
 const UserManagement: React.FC = () => {
-    const [users, setUsers] = useState<UserData[]>([]);
-    const [loading, setLoading] = useState(false);
-    const [modalVisible, setModalVisible] = useState(false);
-    const [editingUser, setEditingUser] = useState<UserData | null>(null);
-    const [changePassModalVisible, setChangePassModalVisible] = useState(false);
-    const [selectedUserForPass, setSelectedUserForPass] = useState<UserData | null>(null);
-    const [passForm] = Form.useForm();
-    const [form] = Form.useForm();
-    const [submitting, setSubmitting] = useState(false);
-    const [messageApi, contextHolder] = message.useMessage();
+    const [users, setUsers] = useState<UserData[]>([]); // Danh sách người dùng
+    const [loading, setLoading] = useState(false); // Trạng thái tải dữ liệu bảng
+    const [modalVisible, setModalVisible] = useState(false); // Trạng thái Modal thêm/sửa người dùng
+    const [editingUser, setEditingUser] = useState<UserData | null>(null); // Người dùng đang được chọn sửa (null là thêm mới)
+    const [changePassModalVisible, setChangePassModalVisible] = useState(false); // Modal đổi mật khẩu
+    const [selectedUserForPass, setSelectedUserForPass] = useState<UserData | null>(null); // Người dùng được chọn để đổi mật khẩu
+    const [passForm] = Form.useForm(); // Form đổi mật khẩu
+    const [form] = Form.useForm(); // Form CRUD người dùng
+    const [submitting, setSubmitting] = useState(false); // Trạng thái spinner khi gửi dữ liệu lên Firestore
+    const [messageApi, contextHolder] = message.useMessage(); // Quản lý thông báo Antd toast
 
-    // Fetch users
+    /**
+     * Tải danh sách người dùng từ Firestore collection 'users'
+     */
     const fetchUsers = async () => {
         setLoading(true);
         try {
@@ -72,19 +81,24 @@ const UserManagement: React.FC = () => {
         }
     };
 
+    // Tự động tải dữ liệu khi trang quản lý tài khoản được nạp
     useEffect(() => {
         fetchUsers();
     }, []);
 
-    // Handle Change Password
+    /**
+     * Gửi yêu cầu đổi mật khẩu cho người dùng
+     * (Sử dụng Cloud Function 'changeUserPassword' để thay đổi trực tiếp từ phía Backend)
+     */
     const handleChangePassword = async () => {
         try {
             const values = await passForm.validateFields();
             setSubmitting(true);
             
-            // Gọi Cloud Function để đổi mật khẩu (Cách chuẩn Backend)
+            // Khởi tạo Callable Cloud Function
             const changeUserPassword = httpsCallable(functions, 'changeUserPassword');
             
+            // Gửi yêu cầu kèm UID và mật khẩu mới
             await changeUserPassword({
                 uid: selectedUserForPass?.uid,
                 newPassword: values.newPassword
@@ -94,10 +108,9 @@ const UserManagement: React.FC = () => {
             passForm.resetFields();
             
             messageApi.success(`Đã cập nhật mật khẩu thành công!`);
-            
         } catch (error: any) {
             console.error(error);
-            // Nếu function chưa được deploy, nó sẽ lỗi. Fallback về thông báo cũ hoặc hiển thị lỗi.
+            // Hiển thị cảnh báo nếu Cloud Function chưa được deploy
             if (error.message.includes('internal') || error.message.includes('not found')) {
                  messageApi.warning("Chức năng đang được triển khai (Cloud Function). Vui lòng deploy backend để hoạt động.");
             } else {
@@ -108,14 +121,16 @@ const UserManagement: React.FC = () => {
         }
     };
 
-    // Handle Create/Update
+    /**
+     * Lưu thông tin người dùng (Tạo mới kèm Auth hoặc Cập nhật thuộc tính)
+     */
     const handleOk = async () => {
         try {
             const values = await form.validateFields();
             setSubmitting(true);
 
             if (editingUser) {
-                // Update
+                // Thao tác chỉnh sửa: Chỉ cập nhật Họ tên, SĐT, Vai trò trong Firestore
                 const userRef = doc(db, 'users', editingUser.id);
                 await updateDoc(userRef, {
                     fullName: values.fullName,
@@ -127,9 +142,9 @@ const UserManagement: React.FC = () => {
                 form.resetFields();
                 fetchUsers();
             } else {
-                // Create
+                // Thao tác thêm mới
 
-                // Check phone uniqueness first
+                // 1. Kiểm tra tính độc nhất của Số điện thoại
                 const usersRef = collection(db, 'users');
                 const q = query(usersRef, where("phone", "==", values.phone));
                 const querySnapshot = await getDocs(q);
@@ -140,13 +155,12 @@ const UserManagement: React.FC = () => {
                     return;
                 }
 
-                // 1. Create in Auth (using secondary app)
+                // 2. Tạo tài khoản trong Auth thông qua SecondaryApp (tránh bị logout Admin)
                 const secondaryAuth = getSecondaryAuth();
                 const userCredential = await createUserWithEmailAndPassword(secondaryAuth, values.email, values.password);
                 const user = userCredential.user;
 
-                // 2. Create in Firestore
-                // Lưu đúng các trường như yêu cầu: email, fullName, phone, role, uid
+                // 3. Ghi dữ liệu tài khoản vào collection 'users' trong Firestore
                 await setDoc(doc(db, 'users', user.uid), {
                     uid: user.uid,
                     email: values.email,
@@ -155,7 +169,7 @@ const UserManagement: React.FC = () => {
                     role: values.role,
                 });
 
-                // Nếu là customer, thêm vào collection customers
+                // 4. Nếu vai trò là Khách hàng (customer), ghi nhận thêm vào bảng riêng 'customers'
                 if (values.role === 'customer') {
                     await setDoc(doc(db, 'customers', user.uid), {
                         uid: user.uid,
@@ -172,6 +186,7 @@ const UserManagement: React.FC = () => {
             }
         } catch (error: any) {
             console.error(error);
+            // Quản lý thông báo lỗi chuẩn từ Firebase Auth
             if (error.code === 'auth/email-already-in-use') {
                 messageApi.error("Email đã tồn tại!");
             } else if (error.code === 'auth/invalid-email') {
@@ -186,20 +201,22 @@ const UserManagement: React.FC = () => {
         }
     };
 
-    // Handle Delete
+    /**
+     * Xóa tài khoản người dùng
+     * (Gọi Cloud Function để xóa bản ghi Auth trước, sau đó mới xóa data Firestore)
+     */
     const handleDelete = async (id: string) => {
         try {
-            // 1. Gọi Cloud Function để xóa user trong Auth (Standard Backend)
-            // Bắt buộc xóa Auth thành công mới xóa data để đảm bảo đồng bộ
+            // 1. Gọi Callable Cloud Function xóa User Auth
             const deleteUserAuth = httpsCallable(functions, 'deleteUserAuth');
             await deleteUserAuth({ uid: id });
 
-            // 2. Xóa dữ liệu trong Firestore (users và customers)
+            // 2. Xóa các tài liệu liên quan trong 'users' và 'customers'
             await deleteDoc(doc(db, 'users', id));
             try {
                 await deleteDoc(doc(db, 'customers', id));
             } catch (e) {
-                // Ignore if not exists
+                // Bỏ qua nếu không tồn tại bản ghi trong customers
             }
             
             message.success('Đã xóa người dùng hoàn toàn (Auth & Data).');
@@ -210,16 +227,7 @@ const UserManagement: React.FC = () => {
         }
     };
 
-    // Handle Reset Password (Email) - Giữ lại như fallback hoặc bỏ nếu user không muốn
-    const handleResetPassword = async (email: string) => {
-        try {
-            await sendPasswordResetEmail(mainAuth, email);
-            message.success(`Đã gửi email đặt lại mật khẩu tới ${email}`);
-        } catch (error: any) {
-            message.error('Lỗi gửi email: ' + error.message);
-        }
-    };
-
+    // Định nghĩa danh sách các cột của bảng
     const columns = [
         {
             title: 'Email',
@@ -316,6 +324,7 @@ const UserManagement: React.FC = () => {
                 </Button>
             </div>
 
+            {/* Bảng hiển thị thông tin danh sách tài khoản */}
             <Table 
                 columns={columns} 
                 dataSource={users} 
@@ -324,6 +333,7 @@ const UserManagement: React.FC = () => {
                 pagination={{ pageSize: 10 }}
             />
 
+            {/* Modal đặt lại mật khẩu mới */}
             <Modal
                 title="Đổi mật khẩu người dùng"
                 open={changePassModalVisible}
@@ -348,6 +358,7 @@ const UserManagement: React.FC = () => {
                 </Form>
             </Modal>
 
+            {/* Modal thêm mới / chỉnh sửa người dùng */}
             <Modal
                 title={editingUser ? "Chỉnh sửa người dùng" : "Thêm người dùng mới"}
                 open={modalVisible}
@@ -356,7 +367,7 @@ const UserManagement: React.FC = () => {
                 confirmLoading={submitting}
             >
                 <Form form={form} layout="vertical" autoComplete="off">
-                    {/* Hack to disable browser autocomplete */}
+                    {/* Hack vô hiệu hóa tự động điền (autocomplete) của trình duyệt */}
                     <input type="text" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, margin: 0, padding: 0, border: 0 }} />
                     <input type="password" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, margin: 0, padding: 0, border: 0 }} />
 

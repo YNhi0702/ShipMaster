@@ -1,3 +1,6 @@
+// src/pages/Inspector/ProposalInspector.tsx
+// Giao diện dành cho Giám định viên (Inspector) để lập Đề xuất phương án sửa chữa chi tiết cho tàu.
+// Bao gồm: mô tả phương án chữ viết, chọn Vật tư từ danh sách, chọn Nhân công (thợ) của xưởng và tự động tính toán chi phí động dựa trên bậc tay nghề thợ.
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Layout, Typography, Descriptions, Image, Button, Spin, message, Form, Input, Modal, Select, InputNumber, Row, Col, Divider, Card } from 'antd';
@@ -9,23 +12,30 @@ import InspectorLayout from '../../components/Inspector/InspectorLayout';
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { TextArea } = Input;
+
+// Bảng đơn giá nhân công cơ bản theo từng chuyên môn của thợ sửa chữa tàu
 const EXPERTISE_RATES: { [key: string]: number } = {
-    'Thợ hàn / cơ khí vỏ tàu': 600000,
-    'Thợ máy tàu': 800000,
-    'Thợ điện tàu': 650000,
-    'Thợ sơn / vệ sinh tàu': 450000,
+    'Thợ hàn / cơ khí vỏ tàu': 600000, // Đơn giá cơ bản cho thợ hàn
+    'Thợ máy tàu': 800000,             // Đơn giá cơ bản cho thợ máy
+    'Thợ điện tàu': 650000,            // Đơn giá cơ bản cho thợ điện
+    'Thợ sơn / vệ sinh tàu': 450000,   // Đơn giá cơ bản cho thợ sơn
 };
 
+/**
+ * Hàm tính toán đơn giá nhân công thực tế dựa theo Chuyên môn và Bậc tay nghề (Bậc thợ)
+ * @param expertise Chuỗi chuyên môn của thợ (ví dụ: "Thợ máy tàu - Bậc 3")
+ * @returns Đơn giá ngày công thực tế sau khi áp dụng hệ số bậc thợ
+ */
 const getExpertiseRate = (expertise: string): number => {
-    if (!expertise) return 350000; // default fallback
+    if (!expertise) return 350000; // Đơn giá dự phòng mặc định nếu thợ chưa cập nhật chuyên môn
     const normalized = expertise.trim().toLowerCase();
     
-    // Tách chuyên môn và bậc năng lực (ví dụ: "Thợ hàn / cơ khí vỏ tàu - Bậc 3")
+    // Tách chuỗi chuyên môn và bậc năng lực bằng ký tự phân tách " - "
     const parts = normalized.split(' - ');
-    const baseExp = parts[0] ? parts[0].trim() : '';
-    const levelStr = parts[1] ? parts[1].trim() : '';
+    const baseExp = parts[0] ? parts[0].trim() : '';  // Phần chuyên môn gốc
+    const levelStr = parts[1] ? parts[1].trim() : ''; // Phần bậc thợ (Bậc 1, Bậc 3, v.v.)
 
-    let baseRate = 350000; // default fallback
+    let baseRate = 350000; // Giá mặc định nếu không khớp chuyên môn trong danh sách
     for (const [key, rate] of Object.entries(EXPERTISE_RATES)) {
         if (key.toLowerCase() === baseExp) {
             baseRate = rate;
@@ -33,51 +43,48 @@ const getExpertiseRate = (expertise: string): number => {
         }
     }
 
+    // Nhân hệ số nhân công động dựa trên tay nghề của thợ
     if (levelStr === 'bậc 1') {
-        return baseRate * 0.8;
+        return baseRate * 0.8;      // Thợ bậc 1 (mới vào nghề) nhận 80% đơn giá cơ bản
     } else if (levelStr === 'bậc 3') {
-        return baseRate * 1.25;
+        return baseRate * 1.25;     // Thợ bậc 3 (lành nghề) nhận 125% đơn giá cơ bản (khích lệ tay nghề cao)
     }
-    return baseRate; // mặc định Bậc 2
+    return baseRate; // Mặc định thợ bậc 2 nhận 100% đơn giá cơ bản
 };
 
-
 const ProposalInspector: React.FC = () => {
-    const { id } = useParams();
+    const { id } = useParams(); // Lấy ID của đơn sửa chữa từ URL
     const navigate = useNavigate();
-    const [orderData, setOrderData] = useState<any>(null);
-    const [loading, setLoading] = useState(true);
-    const [shipName, setShipName] = useState('');
-    const [workshopName, setWorkshopName] = useState('');
-    const [shipInfo, setShipInfo] = useState<any | null>(null);
+    const [orderData, setOrderData] = useState<any>(null); // Lưu thông tin đơn sửa chữa
+    const [loading, setLoading] = useState(true); // Trạng thái tải dữ liệu chung
+    const [shipName, setShipName] = useState(''); // Tên tàu cần sửa
+    const [workshopName, setWorkshopName] = useState(''); // Tên xưởng sửa chữa
+    const [shipInfo, setShipInfo] = useState<any | null>(null); // Thông số chi tiết của tàu
     const [employeeName, setEmployeeName] = useState('');
-    const [proposalLoading, setProposalLoading] = useState(false);
+    const [proposalLoading, setProposalLoading] = useState(false); // Trạng thái đang gửi đề xuất
     const [form] = Form.useForm();
-    const [proposal, setProposal] = useState<string>('');
-    const [existingProposal, setExistingProposal] = useState<string>('');
+    const [proposal, setProposal] = useState<string>(''); // Nội dung đề xuất dạng text
+    const [existingProposal, setExistingProposal] = useState<string>(''); // Nội dung đề xuất cũ đã có trong DB
     const [proposalChanged, setProposalChanged] = useState<boolean>(false);
-    const [customerRequest, setCustomerRequest] = useState<string>('');
-    const [userName, setUserName] = useState('');
+    const [customerRequest, setCustomerRequest] = useState<string>(''); // Yêu cầu sửa đổi đề xuất của khách hàng (nếu có)
+    const [userName, setUserName] = useState(''); // Họ tên Giám định viên hiện tại
     const [loadingUser, setLoadingUser] = useState(true);
-    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]);
-    // Saved (đã tải từ Firestore)
+    const [materialsCatalog, setMaterialsCatalog] = useState<any[]>([]); // Catalog vật tư lấy từ database
+    
+    // Quản lý trạng thái danh sách vật tư & nhân công đã lưu trước đó trong Firestore
     const [savedMaterialLines, setSavedMaterialLines] = useState<any[]>([]);
     const [savedLaborLines, setSavedLaborLines] = useState<any[]>([]);
-    // Draft (đang chỉnh trong modal, chưa lưu Firestore)
+    
+    // Quản lý trạng thái danh sách vật tư & nhân công tạm thời (bản nháp) đang được thêm/sửa trên Modal
     const [materialLines, setMaterialLines] = useState<any[]>([]); // { id, materialId, name, unit, unitPrice, qty, lineTotal }
-    const [modalVisible, setModalVisible] = useState<boolean>(false);
-    const [laborLines, setLaborLines] = useState<any[]>([]); // { id, employeeId?, employeeName?, description, days }
-    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string; Expertise?: string }>>([]);
+    const [laborLines, setLaborLines] = useState<any[]>([]); // { id, employeeId, employeeName, description, days }
+    
+    const [modalVisible, setModalVisible] = useState<boolean>(false); // Trạng thái hiển thị modal lập đề xuất
+    const [workshopEmployees, setWorkshopEmployees] = useState<Array<{ id: string; UserName?: string; Expertise?: string }>>([]); // Danh sách thợ của xưởng
     const [loadingEmployees, setLoadingEmployees] = useState<boolean>(false);
     const [submitAttempted, setSubmitAttempted] = useState<boolean>(false);
 
-    const normalize = (str: any) =>
-        String(str || '')
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .toLowerCase()
-            .trim();
-
+    // 1. Tải thông tin giám định viên và thông tin cơ bản của đơn sửa chữa tàu hiện tại
     useEffect(() => {
         const fetchData = async () => {
             const uid = sessionStorage.getItem('uid');
@@ -87,7 +94,7 @@ const ProposalInspector: React.FC = () => {
             }
 
             try {
-                // Lấy thông tin giám định viên
+                // Lấy thông tin họ tên của Giám định viên đang đăng nhập để hiển thị trên Header
                 const userSnap = await getDoc(doc(db, "users", uid));
                 if (userSnap.exists()) {
                     setUserName(userSnap.data().fullName || userSnap.data().username || "Giám định viên");
@@ -95,14 +102,14 @@ const ProposalInspector: React.FC = () => {
 
                 setLoadingUser(false);
 
-                // Lấy thông tin đơn hàng
+                // Nếu có ID đơn sửa chữa trên URL, tiến hành tải chi tiết đơn hàng
                 if (id) {
                     setLoading(true);
                     const orderRef = doc(db, 'repairOrder', id);
                     const orderSnap = await getDoc(orderRef);
                     if (orderSnap.exists()) {
                         const data = orderSnap.data();
-                        const existing = data?.repairplan || data?.proposal || '';
+                        const existing = data?.repairplan || '';
                         setOrderData({
                             id,
                             ...data,
@@ -110,24 +117,24 @@ const ProposalInspector: React.FC = () => {
                         });
                         setExistingProposal(existing);
                         setProposal(existing);
-                        // ensure the Antd form field is also populated so the textarea shows the existing proposal
+                        
+                        // Đưa nội dung đề xuất cũ vào Textarea trong form
                         try {
                             form.setFieldsValue({ proposal: existing });
-                        } catch (e) {
-                            // ignore if form not ready
-                        }
-                        // load materials catalog for material selector
+                        } catch (e) { /* Bỏ qua nếu form chưa mount */ }
+                        
+                        // Tải danh mục vật tư mẫu (Catalog) từ Firestore để làm dữ liệu cho select box chọn vật tư
                         try {
                             const mats = await getDocs(collection(db, 'material'));
                             setMaterialsCatalog(mats.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
-                        } catch (e) { /* ignore */ }
+                        } catch (e) { /* Bỏ qua lỗi load catalog vật tư */ }
                     } else {
                         message.error('Không tìm thấy đơn hàng.');
                         navigate('/inspector');
                     }
                 }
             } catch (error) {
-                message.error('Lỗi tải dữ liệu.');
+                message.error('Lỗi tải dữ liệu đơn hàng.');
             } finally {
                 setLoading(false);
             }
@@ -135,7 +142,7 @@ const ProposalInspector: React.FC = () => {
         fetchData();
     }, [id, navigate]);
 
-    // Load existing repairordermaterial docs for this order and populate savedMaterialLines
+    // 2. Tải danh sách vật tư đã đề xuất của đơn này (nếu có) trong collection 'repairordermaterial'
     useEffect(() => {
         const loadExistingMaterials = async () => {
             if (!orderData?.id) return;
@@ -150,8 +157,7 @@ const ProposalInspector: React.FC = () => {
                         const mCatalog = materialsCatalog.find(m => m.id === mid) || {};
                         const unitPrice = mCatalog.Price || mCatalog.price || 0;
                         return {
-                            // keep firestore doc id so we can delete/update later
-                            docId: d.id,
+                            docId: d.id, // Lưu ID tài liệu Firestore để có thể xóa/sửa sau này
                             id: Date.now() + Math.floor(Math.random() * 1000),
                             materialId: mid,
                             name: mCatalog.Name || mCatalog.name || '',
@@ -164,15 +170,13 @@ const ProposalInspector: React.FC = () => {
                     setSavedMaterialLines(lines);
                 }
             } catch (e) {
-                // ignore load errors but keep UI usable
                 console.error('Failed to load existing repairordermaterial', e);
             }
         };
         loadExistingMaterials();
-        // run when orderData or materialsCatalog changes (so names/prices can be resolved)
     }, [orderData, materialsCatalog]);
 
-    // Load existing repairorderlabor docs for this order into savedLaborLines
+    // 3. Tải danh sách nhân công sửa chữa đã được phân công cho đơn này (nếu có) trong 'repairorderlabor'
     useEffect(() => {
         const loadExistingLabor = async () => {
             if (!orderData?.id) return;
@@ -206,13 +210,14 @@ const ProposalInspector: React.FC = () => {
         loadExistingLabor();
     }, [orderData]);
 
-    // Load workshop employees with Role_ID = 5 for selection
+    // 4. Tải danh sách toàn bộ nhân viên (thợ) thuộc xưởng sửa chữa được chỉ định (được lọc theo Role_ID = 5 là Thợ kỹ thuật)
     useEffect(() => {
         const loadEmployees = async () => {
             if (!orderData?.workshopId) { setWorkshopEmployees([]); return; }
             try {
                 setLoadingEmployees(true);
                 const employeesRef = collection(db, 'employees');
+                // Lọc thợ thuộc xưởng đang sửa chữa (workShopID) và có vai trò là Thợ kỹ thuật (Role_ID == 5)
                 const q = query(employeesRef, where('workShopID', '==', orderData.workshopId), where('Role_ID', '==', 5));
                 const snap = await getDocs(q);
                 const list = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
@@ -226,6 +231,7 @@ const ProposalInspector: React.FC = () => {
         loadEmployees();
     }, [orderData?.workshopId]);
 
+    // 5. Cập nhật chuyên môn (Expertise) cho các dòng nhân công cũ nếu thông tin chưa có trong bản ghi labor
     useEffect(() => {
         if (!workshopEmployees.length) return;
         setSavedLaborLines(prev => {
@@ -242,6 +248,7 @@ const ProposalInspector: React.FC = () => {
         });
     }, [workshopEmployees]);
 
+    // 6. Lấy tên Tàu, tên Xưởng và tên Giám định viên để hiển thị tường minh lên giao diện
     useEffect(() => {
         const fetchNames = async () => {
             if (!orderData) return;
@@ -262,12 +269,13 @@ const ProposalInspector: React.FC = () => {
                 setWorkshopName(workshopSnap.exists() ? workshopSnap.data().name : 'Không xác định');
                 setEmployeeName(employeeSnap.exists() ? employeeSnap.data().fullName : orderData.inspectorId);
             } catch (error) {
-                // ignore
+                // Bỏ qua lỗi
             }
         };
         fetchNames();
     }, [orderData]);
 
+    // 7. Gửi đề xuất phương án sửa chữa lên hệ thống (Cập nhật đơn hàng, làm sạch và tạo mới bảng vật tư, nhân công)
     const handleSubmitProposal = async (values: any) => {
         if (!orderData) return;
 
@@ -279,13 +287,15 @@ const ProposalInspector: React.FC = () => {
 
         setProposalLoading(true);
         try {
+            // Cập nhật trạng thái đơn sửa chữa thành "Đã đề xuất phương án" và lưu nội dung phương án (repairplan)
             await updateDoc(doc(db, 'repairOrder', orderData.id), {
                 repairplan: incomingPlan,
                 Status: 'Đã đề xuất phương án',
             });
-            // Replace existing material docs for this order with the current materialLines.
+
+            // Thay thế danh sách vật tư đề xuất cũ bằng danh sách mới
             try {
-                // Delete existing docs for this order first
+                // Xóa tất cả tài liệu vật tư cũ liên kết với đơn này
                 const existingQuery = query(collection(db, 'repairordermaterial'), where('RepairOrder_ID', '==', orderData.id));
                 const existingSnap = await getDocs(existingQuery);
                 for (const ed of existingSnap.docs) {
@@ -296,7 +306,7 @@ const ProposalInspector: React.FC = () => {
                     }
                 }
 
-                // Add current lines
+                // Thêm danh sách vật tư mới
                 for (const m of materialLines) {
                     if (!m.materialId) continue;
                     await addDoc(collection(db, 'repairordermaterial'), {
@@ -308,17 +318,19 @@ const ProposalInspector: React.FC = () => {
                 }
             } catch (e) {
                 console.error('Failed to save repairordermaterial', e);
-                // don't block the main proposal submission — show a warning
-                message.warning('Đề xuất văn bản thành công nhưng lưu vật liệu gặp lỗi (xem console).');
+                message.warning('Đề xuất văn bản thành công nhưng lưu vật liệu gặp lỗi.');
             }
 
-            // Replace existing labor docs with the current laborLines
+            // Thay thế danh sách nhân công đề xuất cũ bằng danh sách mới
             try {
+                // Xóa các nhân công cũ của đơn này
                 const existingLabQuery = query(collection(db, 'repairorderlabor'), where('RepairOrder_ID', '==', orderData.id));
                 const existingLabSnap = await getDocs(existingLabQuery);
                 for (const ed of existingLabSnap.docs) {
                     try { await deleteDoc(doc(db, 'repairorderlabor', ed.id)); } catch (innerE) { console.error('Failed to delete repairorderlabor doc', innerE); }
                 }
+                
+                // Thêm nhân công mới được chỉ định kèm đơn giá tính toán động dựa trên bậc tay nghề
                 for (const l of laborLines) {
                     if (!l) continue;
                     await addDoc(collection(db, 'repairorderlabor'), {
@@ -327,17 +339,17 @@ const ProposalInspector: React.FC = () => {
                         EmployeeName: l.employeeName || '',
                         Expertise: l.expertise || '',
                         Days: Number(l.days) || 0,
-                        Quantity: Number(l.days) || 0, // giữ tương thích dữ liệu cũ
-                        UnitPrice: getExpertiseRate(l.expertise || ''),
+                        Quantity: Number(l.days) || 0, // Trường Quantity hỗ trợ tương thích với hệ thống cũ
+                        UnitPrice: getExpertiseRate(l.expertise || ''), // Tính đơn giá nhân công động
                         createdAt: serverTimestamp(),
                     });
                 }
             } catch (e) {
                 console.error('Failed to save repairorderlabor', e);
-                message.warning('Lưu nhân công gặp lỗi (xem console).');
+                message.warning('Lưu nhân công gặp lỗi.');
             }
 
-            // update total/labor/material cost on the repairOrder so workshop can see computed values
+            // Cập nhật tổng chi phí (tổng vật tư + nhân công) vào trực tiếp tài liệu repairOrder để xưởng và khách hàng có thể đọc tức thời
             try {
                 await updateDoc(doc(db, 'repairOrder', orderData.id), {
                     totalCost: Number(materialsCost + laborCost) || 0,
@@ -348,17 +360,16 @@ const ProposalInspector: React.FC = () => {
                 console.error('Failed to update repairOrder.totalCost', e);
             }
 
-            // close modal and inform user
+            // Cập nhật trạng thái hiển thị
             setModalVisible(false);
             setExistingProposal(proposal);
-            // Sau khi lưu thành công, cập nhật bản đã lưu = bản nháp
             setSavedMaterialLines(materialLines.map(l => ({ ...l })));
             setSavedLaborLines(laborLines.map(l => ({
                 ...l,
                 expertise: (l?.expertise || '').toString().trim(),
             })));
             message.success('Đã gửi đề xuất phương án thành công!');
-            // Navigate to inspector home and open the 'proposal' tab
+            // Điều hướng giám định viên về trang danh sách tab đề xuất
             navigate('/inspector?tab=proposal', { replace: true });
         } catch (e) {
             message.error('Lỗi khi gửi đề xuất.');
@@ -367,17 +378,17 @@ const ProposalInspector: React.FC = () => {
         }
     };
 
-    // Material modal helpers
+    // Các hàm phụ trợ quản lý danh sách vật tư nháp trên Modal
     const addMaterialLine = () => setMaterialLines(prev => [...prev, { id: Date.now(), materialId: null, name: '', unit: '', unitPrice: 0, qty: 1, lineTotal: 0 }]);
     const updateMaterialLine = (idx: number, patch: any) => setMaterialLines(prev => {
         const next = [...prev];
         next[idx] = { ...next[idx], ...patch };
-        next[idx].lineTotal = (Number(next[idx].qty) || 0) * (Number(next[idx].unitPrice) || 0);
+        next[idx].lineTotal = (Number(next[idx].qty) || 0) * (Number(next[idx].unitPrice) || 0); // Tính thành tiền dòng vật tư
         return next;
     });
     const removeMaterialLine = (idx: number) => setMaterialLines(prev => prev.filter((_, i) => i !== idx));
 
-    // Labor helpers
+    // Các hàm phụ trợ quản lý danh sách thợ sửa chữa nháp trên Modal
     const addLaborLine = () => setLaborLines(prev => [...prev, { id: Date.now(), employeeId: '', employeeName: '', days: 1, expertise: '' }]);
     const updateLaborLine = (idx: number, patch: any) => setLaborLines(prev => {
         const next = [...prev];
@@ -386,15 +397,13 @@ const ProposalInspector: React.FC = () => {
     });
     const removeLaborLine = (idx: number) => setLaborLines(prev => prev.filter((_, i) => i !== idx));
 
-    // Costs for draft (modal)
+    // Tính tổng tiền vật tư và tổng tiền nhân công cho bản nháp trên Modal
     const materialsCost = materialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
     const laborCost = laborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
-    // Costs for saved (read-only)
+    
+    // Tính tổng tiền vật tư và tổng tiền nhân công của phương án đã được lưu trên DB
     const savedMaterialsCost = savedMaterialLines.reduce((s, x) => s + (Number(x.lineTotal) || 0), 0);
     const savedLaborCost = savedLaborLines.reduce((s, x) => s + (Number(x.days) || 0) * getExpertiseRate(x.expertise || ''), 0);
-
-    // handle saving materials will be part of handleSubmitProposal to combine actions
-
 
     if (loading || !orderData) {
         return <div className="p-6"><Spin /> Đang tải dữ liệu...</div>;
@@ -423,6 +432,8 @@ const ProposalInspector: React.FC = () => {
                 <Title level={3} className="m-0">Đề xuất phương án sửa chữa</Title>
                 <Button onClick={() => navigate(-1)}>Quay lại</Button>
             </div>
+            
+            {/* Chi tiết thông tin Đơn sửa chữa và thông số kỹ thuật của Tàu */}
             <Descriptions title="Thông tin đơn" bordered column={1}>
                 <Descriptions.Item label="Tàu">{shipName}</Descriptions.Item>
                 <Descriptions.Item label="Ngày tạo">{createdAt}</Descriptions.Item>
@@ -432,7 +443,6 @@ const ProposalInspector: React.FC = () => {
                     <Descriptions.Item label="Mô tả">{orderData.description}</Descriptions.Item>
                 )}
 
-                {/* Thông tin tàu gộp chung trong bảng */}
                 {shipInfo?.registration_number && (
                     <Descriptions.Item label="Số đăng ký">{shipInfo.registration_number}</Descriptions.Item>
                 )}
@@ -465,7 +475,7 @@ const ProposalInspector: React.FC = () => {
                 )}
             </Descriptions>
 
-            {/* Only show images section when there are images */}
+            {/* Mục hiển thị hình ảnh chỗ tàu hỏng hóc */}
             {Object.values(imageList as { [key: string]: string }).filter(Boolean).length > 0 && (
                 <div className="mt-6">
                     <Title level={4}>Hình ảnh</Title>
@@ -477,9 +487,8 @@ const ProposalInspector: React.FC = () => {
                 </div>
             )}
 
-
             <div className="mt-8">
-                {/* If order already has a submitted proposal, show it (read-only) */}
+                {/* Nếu đơn hàng đã lập phương án đề xuất rồi, hiển thị dạng Chỉ đọc (Read-only) các thông tin văn bản, vật tư, nhân công và chi phí dự toán */}
                 {orderData.Status === 'Đã đề xuất phương án' && (
                     <div className="mb-6">
                         <Title level={5}>Phương án đã đề xuất</Title>
@@ -512,6 +521,7 @@ const ProposalInspector: React.FC = () => {
 
                             <div className="text-right font-medium">Chi phí vật liệu: {savedMaterialsCost.toLocaleString('vi-VN')} đ</div>
                         </Card>
+                        
                         <Card size="small" title="Nhân công đề xuất" className="mt-4">
                             <Row gutter={8} className="mb-2 font-medium">
                                 <Col span={10}><div>Nhân viên</div></Col>
@@ -535,26 +545,24 @@ const ProposalInspector: React.FC = () => {
                     </div>
                 )}
 
-                {/* Customer adjustment request is now loaded into the proposal textarea inside the modal (if present) */}
-
-                {/* Show a button that opens the modal containing the full proposal + materials form */}
+                {/* Nếu đơn hàng chưa được lập phương án (hoặc đang yêu cầu đề xuất lại), hiển thị nút "Đề xuất" để mở Modal */}
                 {orderData.Status !== 'Đã đề xuất phương án' && (
                     <div className="mb-4">
                         <Button
                             type="primary"
                             size="large"
                             onClick={() => {
-                                // If customer requested a re-proposal, show their request above the textarea (read-only)
+                                // Nếu khách hàng từ chối phương án trước đó và yêu cầu đề xuất lại, hiển thị phản hồi của khách hàng dạng Chỉ đọc để giám định viên nắm thông tin sửa đổi
                                 if (orderData.Status === 'Yêu cầu đề xuất lại' && orderData.CustomerAdjustmentRequest && orderData.CustomerAdjustmentRequest.text) {
                                     const reqText = orderData.CustomerAdjustmentRequest.text;
-                                    // keep customer's request separate from the editable proposal so the inspector edits the proposal itself
                                     setCustomerRequest(reqText);
-                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* Bỏ qua */ }
                                 } else {
                                     setCustomerRequest('');
-                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* ignore */ }
+                                    try { form.setFieldsValue({ proposal }); } catch (e) { /* Bỏ qua */ }
                                 }
-                                // Khởi tạo bản nháp từ dữ liệu đã lưu để đảm bảo đóng modal không làm thay đổi bản lưu
+                                
+                                // Sao chép thông số đã lưu sang danh sách tạm để chỉnh sửa
                                 try {
                                     setMaterialLines(savedMaterialLines.map(l => ({ ...l })));
                                     setLaborLines(savedLaborLines.map(l => ({
@@ -571,6 +579,7 @@ const ProposalInspector: React.FC = () => {
                     </div>
                 )}
 
+                {/* Modal lớn dùng để nhập nội dung phương án, chọn vật tư và gán thợ */}
                 <Modal
                     title="Gửi đề xuất phương án sửa chữa"
                     visible={modalVisible}
@@ -586,16 +595,15 @@ const ProposalInspector: React.FC = () => {
                         onFinish={async (vals) => {
                             await handleSubmitProposal(vals);
                         }}
-
                     >
-                        {/* If customer requested a re-proposal, show their request here (read-only, non-editable) */}
+                        {/* Hiển thị yêu cầu sửa đổi từ Khách hàng để giám định viên điều chỉnh đúng mong muốn */}
                         {customerRequest && (
-                            // Show the card header and display the customer's request inside the card body (read-only)
                             <Card size="small" title="Yêu cầu đề xuất của khách hàng" className="mb-4">
                                 <div style={{ whiteSpace: 'pre-wrap', color: 'rgba(0,0,0,0.85)' }}>{customerRequest}</div>
                             </Card>
                         )}
 
+                        {/* Văn bản mô tả giải pháp kỹ thuật */}
                         <Form.Item
                             label="Phương án đề xuất"
                             name="proposal"
@@ -608,6 +616,7 @@ const ProposalInspector: React.FC = () => {
                         </Form.Item>
 
                         <Form.Item>
+                            {/* Card quản lý chọn Vật tư (Material) và số lượng */}
                             <Card size="small" title="Vật liệu đề xuất" className="mb-4">
                                 <div className="mb-2">
                                     <Button type="dashed" onClick={addMaterialLine}>+ Thêm vật liệu</Button>
@@ -640,6 +649,7 @@ const ProposalInspector: React.FC = () => {
                                 <div className="text-right font-medium">Chi phí vật liệu: {materialsCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
 
+                            {/* Card quản lý phân công Thợ sửa chữa (Labor) và số ngày công sửa chữa */}
                             <Card size="small" title="Nhân công đề xuất" className="mb-4">
                                 <div className="mb-2">
                                     <Button type="dashed" onClick={addLaborLine}>+ Thêm nhân công</Button>
@@ -667,6 +677,7 @@ const ProposalInspector: React.FC = () => {
                                                     });
                                                 }}
                                                 options={(function () {
+                                                    // Ngăn không cho chọn một thợ trùng lặp ở nhiều dòng khác nhau
                                                     const selected = new Set(laborLines.map(l => l.employeeId).filter(Boolean));
                                                     return workshopEmployees.map(e => ({
                                                         label: e.UserName || e.id,
@@ -685,12 +696,14 @@ const ProposalInspector: React.FC = () => {
                                             />
                                         </Col>
                                         <Col span={6}>
+                                            {/* Hiển thị Chuyên môn của thợ (được điền tự động khi chọn thợ) */}
                                             <Input value={line.expertise || ''} disabled />
                                         </Col>
                                         <Col span={4}>
                                             <InputNumber min={1} style={{ width: '100%' }} value={line.days} onChange={(v) => updateLaborLine(idx, { days: Math.max(1, Number(v) || 1) })} />
                                         </Col>
                                         <Col span={3}>
+                                            {/* Đơn giá nhân công cho dòng này = số ngày công * đơn giá thợ động tương ứng */}
                                             <div style={{ paddingTop: 6 }}>{((Number(line.days) || 0) * getExpertiseRate(line.expertise || '')).toLocaleString('vi-VN')} đ</div>
                                         </Col>
                                         <Col span={1}>
@@ -700,6 +713,8 @@ const ProposalInspector: React.FC = () => {
                                 ))}
                                 <div className="text-right font-medium">Chi phí nhân công: {laborCost.toLocaleString('vi-VN')} đ</div>
                             </Card>
+                            
+                            {/* Tổng chi phí ước tính (vật tư + nhân công thợ) */}
                             <div className="text-right font-semibold mt-3">Tổng chi phí: {(materialsCost + laborCost).toLocaleString('vi-VN')} đ</div>
 
                             <div style={{ textAlign: 'right', marginTop: 20 }}>
@@ -715,3 +730,4 @@ const ProposalInspector: React.FC = () => {
 };
 
 export default ProposalInspector;
+

@@ -18,27 +18,31 @@ import { db } from '../../firebase';
 
 const { Title } = Typography;
 
+// Định nghĩa Interface của vật liệu tồn kho
 interface InventoryItem {
-    id: string;
-    [key: string]: any;
+    id: string; // ID tài liệu Firestore
+    [key: string]: any; // Hỗ trợ các trường dữ liệu tùy biến khác
 }
 
 const InventoryManagement: React.FC = () => {
-    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    const [searchText, setSearchText] = useState<string>('');
-    const [allFields, setAllFields] = useState<string[]>([]);
-    const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
-    const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-    const [form] = Form.useForm();
+    const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]); // Danh sách vật liệu
+    const [loading, setLoading] = useState<boolean>(true); // Trạng thái spinner đang tải dữ liệu
+    const [searchText, setSearchText] = useState<string>(''); // Văn bản nhập trong ô tìm kiếm
+    const [allFields, setAllFields] = useState<string[]>([]); // Danh sách tất cả các trường dữ liệu tự động phát hiện trong Firestore
+    const [isModalVisible, setIsModalVisible] = useState<boolean>(false); // Trạng thái ẩn/hiện Modal CRUD
+    const [editingItem, setEditingItem] = useState<InventoryItem | null>(null); // Vật liệu đang được chọn để chỉnh sửa (null nếu là thêm mới)
+    const [form] = Form.useForm(); // Đối tượng quản lý Form dữ liệu
 
+    /**
+     * Tải dữ liệu danh mục vật liệu và tự động phát hiện các trường dữ liệu động của tài liệu
+     */
     const fetchInventory = async () => {
         try {
             setLoading(true);
             const snapshot = await getDocs(collection(db, 'material'));
 
             const items: InventoryItem[] = [];
-            const fieldSet = new Set<string>();
+            const fieldSet = new Set<string>(); // Sử dụng Set để lưu trữ các tên cột duy nhất mà không bị trùng lặp
 
             snapshot.docs.forEach((docSnap) => {
                 const data = docSnap.data();
@@ -47,13 +51,13 @@ const InventoryManagement: React.FC = () => {
                     ...data,
                 };
 
-                // Collect all field names
+                // Thuật toán quét tất cả các keys (thuộc tính) trong dữ liệu để hỗ trợ hiển thị bảng động
                 Object.keys(data).forEach((key) => fieldSet.add(key));
 
                 items.push(item);
             });
 
-            // Sort fields to show common ones first
+            // Danh sách các trường phổ biến được ưu tiên hiển thị trước
             const commonFields = [
                 'Name',
                 'name',
@@ -74,6 +78,7 @@ const InventoryManagement: React.FC = () => {
                 'description',
             ];
 
+            // Sắp xếp các cột: Các cột phổ biến xếp trước, các trường tùy biến lạ xuất hiện sau
             const sortedFields = [
                 ...commonFields.filter((f) => fieldSet.has(f)),
                 ...Array.from(fieldSet).filter((f) => !commonFields.includes(f)),
@@ -89,11 +94,14 @@ const InventoryManagement: React.FC = () => {
         }
     };
 
+    // Tải dữ liệu ngay khi giao diện kho được nạp
     useEffect(() => {
         fetchInventory();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    /**
+     * Hàm định dạng hiển thị các kiểu dữ liệu an toàn trên bảng chính
+     */
     const formatValue = (value: any): string => {
         if (value === null || value === undefined) {
             return '---';
@@ -118,6 +126,7 @@ const InventoryManagement: React.FC = () => {
         return String(value);
     };
 
+    // Hàm định dạng tiền tệ Việt Nam đồng
     const formatCurrency = (value: any): string => {
         const num = typeof value === 'number' ? value : Number(value);
         return Number.isFinite(num)
@@ -125,6 +134,9 @@ const InventoryManagement: React.FC = () => {
             : '---';
     };
 
+    /**
+     * Hàm lấy nhãn hiển thị Việt hóa cho các cột dữ liệu động
+     */
     const getFieldLabel = (field: string): string => {
         const labelMap: { [key: string]: string } = {
             Name: 'Tên vật liệu',
@@ -148,6 +160,9 @@ const InventoryManagement: React.FC = () => {
         return labelMap[field] || field;
     };
 
+    /**
+     * Xác định xem một trường dữ liệu có phải là trường liên quan đến tiền tệ hay không
+     */
     const shouldFormatAsCurrency = (field: string): boolean => {
         const currencyFields = [
             'Price',
@@ -164,12 +179,14 @@ const InventoryManagement: React.FC = () => {
         return currencyFields.some((cf) => field.toLowerCase().includes(cf.toLowerCase()));
     };
 
+    // Nhấp nút "Thêm vật liệu" để mở Form rỗng
     const handleAdd = () => {
         setEditingItem(null);
         form.resetFields();
         setIsModalVisible(true);
     };
 
+    // Nhấp nút "Chỉnh sửa" để mở Form điền sẵn dữ liệu của bản ghi được chọn
     const handleEdit = (record: InventoryItem) => {
         setEditingItem(record);
         const formValues: Record<string, any> = {};
@@ -182,6 +199,7 @@ const InventoryManagement: React.FC = () => {
         setIsModalVisible(true);
     };
 
+    // Nhấp nút "Xóa" để xóa tài liệu khỏi collection 'material'
     const handleDelete = async (id: string) => {
         try {
             await deleteDoc(doc(db, 'material', id));
@@ -193,11 +211,13 @@ const InventoryManagement: React.FC = () => {
         }
     };
 
+    // Thực hiện lưu dữ liệu (Thêm mới hoặc Cập nhật)
     const handleSave = async () => {
         try {
             const values = await form.validateFields();
             const saveData: Record<string, any> = {};
 
+            // Nhặt các trường dữ liệu hợp lệ từ form
             allFields.forEach((field) => {
                 if (field === 'id') return;
                 if (values[field] !== undefined && values[field] !== null && values[field] !== '') {
@@ -206,11 +226,11 @@ const InventoryManagement: React.FC = () => {
             });
 
             if (editingItem) {
-                // Update existing item
+                // Thực hiện cập nhật tài liệu đã có
                 await updateDoc(doc(db, 'material', editingItem.id), saveData);
                 message.success('Đã cập nhật vật liệu thành công!');
             } else {
-                // Add new item
+                // Thực hiện tạo tài liệu mới
                 await addDoc(collection(db, 'material'), saveData);
                 message.success('Đã thêm vật liệu thành công!');
             }
@@ -225,20 +245,23 @@ const InventoryManagement: React.FC = () => {
         }
     };
 
+    // Hủy bỏ thao tác sửa/thêm
     const handleCancel = () => {
         setIsModalVisible(false);
         form.resetFields();
         setEditingItem(null);
     };
 
+    // Lọc tìm kiếm dữ liệu trên bảng theo từ khóa
     const filteredItems = inventoryItems.filter((item) => {
         if (!searchText) return true;
         const searchLower = searchText.toLowerCase();
         return Object.values(item).some((value) =>
-            String(value).toLowerCase().includes(searchLower),
+            String(value).toLowerCase().includes(searchLower)
         );
     });
 
+    // Chuyển đổi chuỗi tiền tệ (phân tách dấu phẩy) về số
     const currencyParser = (value?: string): number => {
         if (!value) return 0;
         const parsed = value.replace(/\$\s?|(,*)/g, '');
@@ -246,12 +269,14 @@ const InventoryManagement: React.FC = () => {
         return Number.isNaN(num) ? 0 : num;
     };
 
+    // Định dạng số hiển thị trong ô nhập tiền có dấu phân cách hàng nghìn
     const currencyFormatter = (value?: number | string): string => {
         if (value === null || value === undefined || value === '') return '';
         const str = String(value);
         return str.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
     };
 
+    // Xác định kiểu Input hiển thị động trên Modal dựa theo tên trường
     const getInputComponent = (field: string) => {
         if (shouldFormatAsCurrency(field)) {
             return (
@@ -285,6 +310,7 @@ const InventoryManagement: React.FC = () => {
         return <Input />;
     };
 
+    // Định nghĩa danh sách các cột của bảng chính
     const columns: ColumnsType<InventoryItem> = [
         {
             title: 'STT',
@@ -316,18 +342,14 @@ const InventoryManagement: React.FC = () => {
                         icon={<EditOutlined />}
                         onClick={() => handleEdit(record)}
                         size="small"
-                    >
-            
-                    </Button>
+                    />
                     <Popconfirm
                         title="Bạn có chắc chắn muốn xóa vật liệu này?"
                         onConfirm={() => handleDelete(record.id)}
                         okText="Xóa"
                         cancelText="Hủy"
                     >
-                        <Button type="link" danger icon={<DeleteOutlined />} size="small">
-    
-                        </Button>
+                        <Button type="link" danger icon={<DeleteOutlined />} size="small" />
                     </Popconfirm>
                 </Space>
             ),
@@ -360,6 +382,7 @@ const InventoryManagement: React.FC = () => {
                 />
             </div>
 
+            {/* Bảng hiển thị vật tư linh hoạt */}
             <Table<InventoryItem>
                 columns={columns}
                 dataSource={filteredItems}
@@ -370,12 +393,11 @@ const InventoryManagement: React.FC = () => {
                 pagination={{
                     pageSize: 10,
                     showSizeChanger: false,
-
-                    
                 }}
                 scroll={{ x: 'max-content' }}
             />
 
+            {/* Modal thêm / sửa vật liệu */}
             <Modal
                 title={editingItem ? 'Chỉnh sửa vật liệu' : 'Thêm vật liệu mới'}
                 open={isModalVisible}
@@ -388,7 +410,6 @@ const InventoryManagement: React.FC = () => {
             >
                 <Form form={form} layout="vertical">
                     {allFields.map((field) => {
-                        // Skip id field in form
                         if (field === 'id') return null;
 
                         const isRequired = ['Name', 'name', 'MaterialName'].includes(field);

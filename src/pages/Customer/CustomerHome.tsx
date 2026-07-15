@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Layout, Button, Table, Typography, message, Card, Space, Tag } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { Layout, Button, Table, Typography, message, Card, Space, Tag, Input, Select, Row, Col } from 'antd';
 import { useNavigate } from 'react-router-dom';
+import { SearchOutlined, FilterOutlined } from '@ant-design/icons';
 import { authService } from '../../services/authService';
 import { orderService } from '../../services/orderService';
 import CustomerLayout from '../../components/Customer/CustomerLayout';
@@ -11,29 +11,29 @@ const { Title } = Typography;
 
 const CustomerHome: React.FC = () => {
     const navigate = useNavigate();
-    const [userName, setUserName] = useState('');
-    const [myReferralCode, setMyReferralCode] = useState('');
-    const [orders, setOrders] = useState<any[]>([]);
-    const [loadingUser, setLoadingUser] = useState(true);
-    const [loadingOrders, setLoadingOrders] = useState(true);
+    const [userName, setUserName] = useState(''); // Họ tên của Khách hàng hiện tại
+    const [orders, setOrders] = useState<any[]>([]); // Danh sách các đơn sửa chữa của Khách hàng
+    const [loadingUser, setLoadingUser] = useState(true); // Trạng thái tải thông tin người dùng
+    const [loadingOrders, setLoadingOrders] = useState(true); // Trạng thái tải danh sách đơn hàng
+    const [searchText, setSearchText] = useState(''); // Từ khóa tìm kiếm tàu, xưởng, mô tả hoặc mã đơn
+    const [statusFilter, setStatusFilter] = useState(''); // Trạng thái lọc
 
     useEffect(() => {
         const fetchData = async () => {
-            const uid = sessionStorage.getItem('uid');
+            const uid = sessionStorage.getItem('uid'); // Lấy UID của khách hàng từ session storage
             if (!uid) {
-                navigate('/login');
+                navigate('/login'); // Nếu chưa đăng nhập thì chuyển hướng ngay sang trang Login
                 return;
             }
 
             try {
-                // Lấy thông tin khách hàng
+                // 1. Tải thông tin tài khoản Khách hàng
                 const profile = await authService.getCustomerProfile(uid);
                 if (profile) {
                     setUserName(profile.fullName);
-                    setMyReferralCode(profile.myreferralCode);
                 }
 
-                // Lấy danh sách đơn sửa chữa
+                // 2. Tải toàn bộ danh sách đơn hàng mà khách này đã gửi lên hệ thống
                 const ordersData = await orderService.getCustomerOrders(uid);
                 setOrders(ordersData);
             } catch (error) {
@@ -47,6 +47,9 @@ const CustomerHome: React.FC = () => {
         fetchData();
     }, [navigate]);
 
+    /**
+     * Chuẩn hóa trạng thái đơn hàng (loại bỏ dấu tiếng Việt, chữ viết thường) phục vụ logic check
+     */
     const normalizeStatus = (status: any) => {
         if (!status) return '';
         return String(status)
@@ -57,6 +60,22 @@ const CustomerHome: React.FC = () => {
             .trim();
     };
 
+    /**
+     * Hàm xóa dấu tiếng Việt phục vụ logic tìm kiếm không phân biệt dấu/lệch dấu Unicode
+     */
+    const removeVietnameseTones = (str: string) => {
+        if (!str) return '';
+        return str
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd')
+            .replace(/Đ/g, 'd')
+            .toLowerCase()
+            .replace(/\s+/g, ' ')
+            .trim();
+    };
+
+    // Hàm định dạng số hiển thị sang Việt Nam Đồng
     const formatCurrency = (value: any) => {
         const numeric = typeof value === 'number' ? value : Number(value);
         if (Number.isFinite(numeric)) {
@@ -65,6 +84,9 @@ const CustomerHome: React.FC = () => {
         return '---';
     };
 
+    /**
+     * Hàm xử lý định dạng ngày giờ an toàn trên bảng chính
+     */
     const formatDateTime = (value: any) => {
         if (!value) return '';
         if (value instanceof Date) {
@@ -85,36 +107,21 @@ const CustomerHome: React.FC = () => {
         return '';
     };
 
-    const handleCopyReferralCode = async () => {
-        if (!myReferralCode) {
-            message.warning('Chưa có mã giới thiệu để sao chép.');
-            return;
-        }
-
-        try {
-            await navigator.clipboard.writeText(myReferralCode);
-            message.success('Đã sao chép mã giới thiệu');
-        } catch (error) {
-            message.error('Không thể sao chép mã giới thiệu');
-        }
-    };
-
-
+    // Cấu hình các cột của Table đơn sửa chữa phía Khách hàng
     const columns = [
         {
             title: 'Tàu',
-            dataIndex: 'shipName',
+            dataIndex: 'shipName', // Tên tàu sửa chữa
             key: 'shipName',
         },
         {
             title: 'Xưởng',
-            dataIndex: 'workshopName',
+            dataIndex: 'workshopName', // Xưởng tiếp nhận sửa chữa
             key: 'workshopName',
         },
-        
         {
             title: 'Ngày tạo',
-            dataIndex: 'createdAt',
+            dataIndex: 'createdAt', // Ngày gửi yêu cầu sửa chữa
             key: 'createdAt',
         },
         {
@@ -122,10 +129,15 @@ const CustomerHome: React.FC = () => {
             dataIndex: 'Status',
             key: 'Status',
             render: (_: string, record: any) => {
-                const status = record.Status || record.status || record.currentStatus || '';
+                const status = record.Status || '';
                 let color = 'text-blue-600';
-                if (status === 'Hoàn thành') color = 'text-green-600 font-semibold';
-                else if (status === 'Đang giám định') color = 'text-yellow-600 font-semibold';
+                
+                // Tô màu sắc thái trực quan theo từng tiến trình trạng thái
+                if (status === 'Hoàn thành sửa chữa' || status === 'Đã hoàn thành thanh toán') {
+                    color = 'text-green-600 font-semibold';
+                } else if (status === 'Đang giám định' || status === 'Đã lên lịch') {
+                    color = 'text-yellow-600 font-semibold';
+                }
                 return <span className={color}>{status}</span>;
             },
         },
@@ -133,12 +145,11 @@ const CustomerHome: React.FC = () => {
             title: 'Hành động',
             key: 'action',
             render: (_: any, record: any) => {
-                const statusOriginal = record.Status || record.status || record.currentStatus || '';
                 return (
                     <Button
                         type="link"
                         className="!p-0 !text-blue-600 hover:underline"
-                        onClick={() => navigate(`/orders/${record.id}`, { state: record })}
+                        onClick={() => navigate(`/orders/${record.id}`, { state: record })} // Di chuyển đến trang xem chi tiết
                     >
                         Xem chi tiết
                     </Button>
@@ -147,32 +158,25 @@ const CustomerHome: React.FC = () => {
         },
     ];
 
+    // Lọc đơn hàng dựa trên từ khóa tìm kiếm và bộ lọc trạng thái
+    const filteredOrders = orders.filter((order: any) => {
+        const shipName = removeVietnameseTones(order.shipName || '');
+        const workshopName = removeVietnameseTones(order.workshopName || '');
+        const search = removeVietnameseTones(searchText);
+
+        const matchesSearch =
+            shipName.includes(search) ||
+            workshopName.includes(search);
+
+        const matchesStatus = !statusFilter || order.Status === statusFilter;
+
+        return matchesSearch && matchesStatus;
+    });
+
     return (
         <CustomerLayout userName={userName} loadingUser={loadingUser}>
             <div className="m-0 p-0">
-                <Card className="mb-5 shadow-sm border border-blue-100 bg-gradient-to-r from-blue-50 to-white">
-                    <Space direction="vertical" size={8} className="w-full">
-                        <div className="flex items-center justify-between gap-3 flex-wrap">
-                            <div>
-                                <div className="text-sm text-gray-500">Mã giới thiệu của bạn</div>
-                                <div className="text-2xl font-semibold tracking-wider text-blue-700">
-                                    {myReferralCode || 'Chưa có mã'}
-                                </div>
-                            </div>
-                            <Button
-                                type="primary"
-                                icon={<CopyOutlined />}
-                                onClick={handleCopyReferralCode}
-                                disabled={!myReferralCode}
-                            >
-                                Sao chép
-                            </Button>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            Chia sẻ mã giới thiệu của bạn cho khách hàng mới. Khi khách hàng đó phát sinh đơn hàng đầu tiên,giảm 5% trên giá trị đơn hàng.
-                        </div>
-                    </Space>
-                </Card>
+                {/* Nút hành động Tạo đơn sửa chữa */}
                 <Button
                     type="primary"
                     size="large"
@@ -181,16 +185,60 @@ const CustomerHome: React.FC = () => {
                 >
                     Tạo đơn sửa chữa mới
                 </Button>
-                <Title level={4}>Danh sách đơn sửa chữa</Title>
+
+                {/* Thanh tìm kiếm và Bộ lọc nâng cao */}
+                <Card className="mb-6 shadow-sm border border-gray-100">
+                    <Row gutter={[16, 16]} align="middle">
+                        <Col xs={24} md={16} lg={18}>
+                            <Input
+                                placeholder="Tìm kiếm theo tên tàu hoặc xưởng..."
+                                prefix={<SearchOutlined className="text-gray-400" />}
+                                value={searchText}
+                                onChange={(e) => setSearchText(e.target.value)}
+                                allowClear
+                                size="large"
+                                className="w-full rounded-md"
+                            />
+                        </Col>
+                        <Col xs={24} md={8} lg={6}>
+                            <Select
+                                placeholder="Lọc theo trạng thái"
+                                value={statusFilter || undefined}
+                                onChange={(value) => setStatusFilter(value || '')}
+                                allowClear
+                                size="large"
+                                className="w-full"
+                                suffixIcon={<FilterOutlined className="text-gray-400" />}
+                                options={[
+                                    { value: 'Chờ giám định', label: 'Chờ giám định' },
+                                    { value: 'Đang giám định', label: 'Đang giám định' },
+                                    { value: 'Đã đề xuất phương án', label: 'Đã đề xuất phương án' },
+                                    { value: 'Yêu cầu đề xuất lại', label: 'Yêu cầu đề xuất lại' },
+                                    { value: 'Sắp xếp lịch sửa chữa', label: 'Sắp xếp lịch sửa chữa' },
+                                    { value: 'Đã lên lịch', label: 'Đã lên lịch' },
+                                    { value: 'Đã tạo hóa đơn', label: 'Đã tạo hóa đơn' },
+                                    { value: 'Thanh toán một phần', label: 'Thanh toán một phần' },
+                                    { value: 'Đã hoàn thành thanh toán', label: 'Đã hoàn thành thanh toán' },
+                                    { value: 'Hoàn thành sửa chữa', label: 'Hoàn thành sửa chữa' },
+                                ]}
+                            />
+                        </Col>
+                    </Row>
+                </Card>
+
+                <Title level={4} className="mb-4">
+                    Danh sách đơn sửa chữa
+                </Title>
+                
+                {/* Bảng hiển thị danh sách đơn sửa chữa */}
                 <Table
                     columns={columns}
-                    dataSource={orders}
+                    dataSource={filteredOrders}
                     rowKey="id"
                     loading={loadingOrders}
                     bordered
                     className="shadow-sm"
                 />
-            
             </div>
         </CustomerLayout>
     );

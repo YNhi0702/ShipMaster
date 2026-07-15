@@ -1,3 +1,6 @@
+// src/pages/Workshop/WorkshopHome.tsx
+// Giao diện chính dành cho Chủ xưởng sửa chữa (Workshop Owner).
+// Quản lý 2 tab chính: tab "Đơn sửa chữa" (xem chi tiết) và tab "Lịch sửa chữa" (lập lịch biểu, theo dõi tiến độ và đánh dấu hoàn thành).
 import React, { useEffect, useState } from 'react';
 import { Button, Table, Typography, message, Space, Form, DatePicker, Modal, Select, Input, Checkbox } from 'antd';
 import moment from 'moment';
@@ -11,26 +14,27 @@ const { Title } = Typography;
 
 const WorkshopHome: React.FC = () => {
     const navigate = useNavigate();
-    const [orders, setOrders] = useState<any[]>([]);
-    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule' | 'employees' | 'inspected' | 'proposal'>('orders');
-    const [workshops, setWorkshops] = useState<Array<{ id: string; name: string }>>([]);
-    const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null);
-    const [orderSearch, setOrderSearch] = useState<string>('');
-    const [scheduleSearch, setScheduleSearch] = useState<string>('');
-    const [scheduleDateRange, setScheduleDateRange] = useState<any[] | null>(null);
+    const [orders, setOrders] = useState<any[]>([]); // Danh sách toàn bộ đơn sửa chữa
+    const [selectedKey, setSelectedKey] = useState<'orders' | 'schedule' | 'employees' | 'inspected' | 'proposal'>('orders'); // Tab hiện tại được chọn
+    const [workshops, setWorkshops] = useState<Array<{ id: string; name: string }>>([]); // Các xưởng thuộc quyền sở hữu của user
+    const [selectedWorkshopId, setSelectedWorkshopId] = useState<string | null>(null); // Xưởng hiện tại đang xem thông tin
+    const [orderSearch, setOrderSearch] = useState<string>(''); // Nội dung tìm kiếm đơn hàng
+    const [scheduleSearch, setScheduleSearch] = useState<string>(''); // Nội dung tìm kiếm lịch trình
+    const [scheduleDateRange, setScheduleDateRange] = useState<any[] | null>(null); // Bộ lọc khoảng thời gian lịch trình
     const location = useLocation();
-    const [userName, setUserName] = useState<string>('');
+    const [userName, setUserName] = useState<string>(''); // Tên chủ xưởng hiển thị ở header
     const [loadingUser, setLoadingUser] = useState<boolean>(true);
     const [loadingOrders, setLoadingOrders] = useState<boolean>(true);
     const [refreshing, setRefreshing] = useState<boolean>(false);
-    // scheduling modal state
+    
+    // State quản lý Modal lập lịch sửa chữa
     const [scheduleModalVisible, setScheduleModalVisible] = useState(false);
     const [schedulingOrderId, setSchedulingOrderId] = useState<string | null>(null);
     const [scheduling, setScheduling] = useState(false);
     const [form] = Form.useForm();
-    const [isEditingSchedule, setIsEditingSchedule] = useState(false);
+    const [isEditingSchedule, setIsEditingSchedule] = useState(false); // Xác định xem là "Tạo mới lịch" hay "Chỉnh sửa lịch cũ"
 
-    // initialize selected tab from URL query param `tab`
+    // 1. Đồng bộ hóa tab được chọn dựa vào tham số query trên URL (?tab=...)
     useEffect(() => {
         try {
             const params = new URLSearchParams(location.search || '');
@@ -40,11 +44,10 @@ const WorkshopHome: React.FC = () => {
             else if (tab === 'inspected') setSelectedKey('inspected');
             else if (tab === 'proposal') setSelectedKey('proposal');
             else setSelectedKey('orders');
-        } catch (e) {
-            // ignore
-        }
+        } catch (e) { /* Bỏ qua */ }
     }, [location.search]);
 
+    // 2. Tải danh sách đơn sửa chữa của xưởng từ Firestore
     const fetchOrdersForWorkshop = async (workshopId: string | null) => {
         if (!workshopId) {
             setOrders([]);
@@ -54,53 +57,26 @@ const WorkshopHome: React.FC = () => {
         try {
             setLoadingOrders(true);
             setRefreshing(true);
-            // Support a special 'ALL' value to fetch orders for all workshops the user owns
-            const orderFieldCandidates = ['workshopId', 'workShopId', 'workshop_id', 'workshop', 'shopId'];
+            
             let ordersSnap: any = null;
 
+            // Hỗ trợ chọn giá trị 'ALL' để gom toàn bộ đơn sửa chữa của mọi xưởng do user này làm chủ
             if (workshopId === 'ALL') {
-                // If user chose 'ALL', fetch all repair orders and filter client-side to those belonging to any owned workshop
                 const allOrders = await getDocs(collection(db, 'repairOrder'));
                 const ownedIds = workshops.map((w) => w.id);
+                // Lọc ở phía Client
                 const filtered = allOrders.docs.filter((d) => {
                     const o = d.data();
-                    return ownedIds.some((wsid) =>
-                        o?.workshopId === wsid ||
-                        o?.workShopId === wsid ||
-                        o?.workshop === wsid ||
-                        o?.workshop_id === wsid ||
-                        o?.shopId === wsid
-                    );
+                    return ownedIds.includes(o?.workshopId || '');
                 });
                 ordersSnap = { docs: filtered } as any;
             } else {
-                // Try querying repairOrder by common workshop id field names first
-                for (const ofld of orderFieldCandidates) {
-                    const oq = query(collection(db, 'repairOrder'), where(ofld, '==', workshopId));
-                    const snap = await getDocs(oq);
-                    if (!snap.empty) {
-                        ordersSnap = snap;
-                        break;
-                    }
-                }
-
-                // Fallback: if no direct query returned docs, fetch all orders and filter client-side by any matching field
-                if (!ordersSnap) {
-                    const allOrders = await getDocs(collection(db, 'repairOrder'));
-                    const filtered = allOrders.docs.filter((d) => {
-                        const o = d.data();
-                        return (
-                            o?.workshopId === workshopId ||
-                            o?.workShopId === workshopId ||
-                            o?.workshop === workshopId ||
-                            o?.workshop_id === workshopId ||
-                            o?.shopId === workshopId
-                        );
-                    });
-                    ordersSnap = { docs: filtered } as any;
-                }
+                // Thống nhất quy chuẩn đặt tên: Đơn liên kết với xưởng bằng trường 'workshopId'
+                const oq = query(collection(db, 'repairOrder'), where('workshopId', '==', workshopId));
+                ordersSnap = await getDocs(oq);
             }
 
+            // Map thêm thông tin tên Tàu của từng đơn để hiển thị đầy đủ
             const rows = await Promise.all(
                 ordersSnap.docs.map(async (d: any) => {
                     const o = d.data();
@@ -111,9 +87,7 @@ const WorkshopHome: React.FC = () => {
                             const shipDoc = await getDoc(doc(db, 'ship', o.shipId));
                             shipName = shipDoc.exists() ? (shipDoc.data() as any).name : 'Không xác định';
                         }
-                    } catch (e) {
-                        // ignore
-                    }
+                    } catch (e) { /* Bỏ qua lỗi load tên tàu */ }
                     return {
                         id: d.id,
                         ...o,
@@ -132,6 +106,7 @@ const WorkshopHome: React.FC = () => {
         }
     };
 
+    // 3. Khởi tạo tải dữ liệu (Thông tin Tên chủ xưởng và danh sách Xưởng sở hữu)
     const fetchData = async () => {
         const sessionUid = sessionStorage.getItem('uid');
         const uid = sessionUid || auth.currentUser?.uid || null;
@@ -141,9 +116,8 @@ const WorkshopHome: React.FC = () => {
             setLoadingOrders(true);
             setRefreshing(true);
 
-            // fetch owner name: prefer users/{uid}.UserName, then employees (queried by email), then workShop, then auth.displayName
+            // Tìm kiếm họ tên hiển thị: kiểm tra users -> employees (theo email) -> workShop -> displayName của Auth
             try {
-                // If we have a uid (from session or auth), try users/{uid} first
                 const userRef = uid ? doc(db, 'users', uid) : null;
                 let resolvedName: string | null = null;
                 if (userRef) {
@@ -154,7 +128,6 @@ const WorkshopHome: React.FC = () => {
                     }
                 }
 
-                // If we still don't have a name, try to find an employee record by email (employee docs often aren't keyed by auth uid)
                 if (!resolvedName) {
                     try {
                         const email = auth.currentUser?.email;
@@ -166,114 +139,53 @@ const WorkshopHome: React.FC = () => {
                                 resolvedName = empData?.UserName || empData?.fullName || empData?.name || null;
                             }
                         }
-                    } catch (e) {
-                        // ignore employee lookup errors
-                    }
+                    } catch (e) { /* Bỏ qua */ }
                 }
 
-                // If still not found, try workShop collection (doc id might equal uid)
                 if (!resolvedName && uid) {
                     const wsDoc = await getDoc(doc(db, 'workShop', uid));
                     if (wsDoc.exists()) resolvedName = wsDoc.data().name || null;
                 }
 
-                // final fallback to Firebase Auth displayName or static label
                 if (!resolvedName) resolvedName = auth.currentUser?.displayName || 'Chủ xưởng';
 
                 setUserName(resolvedName);
-            } catch (e) {
-                // ignore
-            }
+            } catch (e) { /* Bỏ qua */ }
 
-            // fetch list of workshops owned by this user and select the first one by default
+            // Tìm danh sách xưởng mà user này được chỉ định làm chủ (owner)
             if (!uid) {
                 setWorkshops([]);
                 setSelectedWorkshopId(null);
                 setOrders([]);
             } else {
                 try {
-                    const ownerFieldCandidates = ['ownerId', 'ownerID', 'ownerid', 'owner', 'ownerUID', 'ownerUid'];
-                    const wsAll = await getDocs(collection(db, 'workShop'));
+                    // Thống nhất quy chuẩn đặt tên: Chủ xưởng liên kết bằng trường 'ownerID'
+                    const wsQ = query(collection(db, 'workShop'), where('ownerID', '==', uid));
+                    const wsSnap = await getDocs(wsQ);
                     const found: Array<{ id: string; name: string }> = [];
-                    for (const d of wsAll.docs) {
-                        const data: any = d.data();
-                        // check owner fields first (explicit common names)
-                        let matched = false;
-                        for (const fld of ownerFieldCandidates) {
-                            const v = data?.[fld];
-                            if (!v) continue;
-                            // string match
-                            if (typeof v === 'string' && (v === uid || v.includes(uid))) {
-                                matched = true;
-                                break;
-                            }
-                            // array of strings or ids
-                            if (Array.isArray(v)) {
-                                if (v.includes(uid) || v.some((el: any) => (typeof el === 'string' && el.includes && el.includes(uid)))) {
-                                    matched = true;
-                                    break;
-                                }
-                                // array of objects [{ uid: '...' }, { id: '...' }]
-                                if (v.some((el: any) => el && (el.uid === uid || el.id === uid || el.ownerId === uid))) {
-                                    matched = true;
-                                    break;
-                                }
-                            }
-                            // object with nested id/uid
-                            if (typeof v === 'object' && v !== null) {
-                                if (v.uid === uid || v.id === uid || v.ownerId === uid) {
-                                    matched = true;
-                                    break;
-                                }
-                            }
-                        }
 
-                        // fallback: scan all fields for a direct match (covers non-standard schemas)
-                        if (!matched) {
-                            const keys = Object.keys(data || {});
-                            for (const k of keys) {
-                                const v = data[k];
-                                if (!v) continue;
-                                if (typeof v === 'string' && (v === uid || v.includes && v.includes(uid))) {
-                                    matched = true;
-                                    break;
-                                }
-                                if (Array.isArray(v)) {
-                                    if (v.includes(uid) || v.some((el: any) => (typeof el === 'string' && el.includes && el.includes(uid)))) {
-                                        matched = true;
-                                        break;
-                                    }
-                                    if (v.some((el: any) => el && (el.uid === uid || el.id === uid || el.ownerId === uid))) {
-                                        matched = true;
-                                        break;
-                                    }
-                                }
-                                if (typeof v === 'object' && v !== null) {
-                                    if (v.uid === uid || v.id === uid || v.ownerId === uid) {
-                                        matched = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+                    wsSnap.docs.forEach((d) => {
+                        const data = d.data();
+                        found.push({ id: d.id, name: data?.name || data?.UserName || d.id });
+                    });
 
-                        // also accept doc id equals uid as a fallback
-                        if (!matched && d.id === uid) matched = true;
-                        if (matched) {
-                            found.push({ id: d.id, name: data?.name || data?.UserName || d.id });
+                    // Nhận diện dự phòng nếu ID tài liệu trùng với UID
+                    if (found.length === 0) {
+                        const wsDoc = await getDoc(doc(db, 'workShop', uid));
+                        if (wsDoc.exists()) {
+                            const data = wsDoc.data();
+                            found.push({ id: wsDoc.id, name: data?.name || data?.UserName || wsDoc.id });
                         }
                     }
 
-                    // (strict) only include workshops where the current user is explicitly an owner
-
                     setWorkshops(found);
                     const defaultWs = found.length > 0 ? found[0].id : null;
-                    // only set selectedWorkshopId if not already chosen by the user
+                    
+                    // Chọn mặc định xưởng đầu tiên trong danh sách nếu chưa có xưởng nào được chọn
                     if (!selectedWorkshopId && defaultWs) {
                         setSelectedWorkshopId(defaultWs);
                         await fetchOrdersForWorkshop(defaultWs);
                     } else if (selectedWorkshopId) {
-                        // refresh orders for the currently selected workshop
                         await fetchOrdersForWorkshop(selectedWorkshopId);
                     }
                 } catch (e) {
@@ -293,15 +205,14 @@ const WorkshopHome: React.FC = () => {
         fetchData();
     }, [navigate, location.search]);
 
-    // when selectedWorkshopId changes (user picks different workshop), reload orders
+    // Gọi tải lại đơn hàng khi người dùng thay đổi xưởng sửa chữa ở Select box
     useEffect(() => {
         if (selectedWorkshopId) {
             fetchOrdersForWorkshop(selectedWorkshopId);
         }
     }, [selectedWorkshopId]);
 
-
-
+    // Các cột hiển thị danh sách đơn sửa chữa (Tab Đơn sửa chữa)
     const columns = [
         {
             title: 'STT',
@@ -309,9 +220,9 @@ const WorkshopHome: React.FC = () => {
             width: 60,
             render: (_: any, __: any, index: number) => index + 1,
         },
-    { title: 'Ngày tạo', dataIndex: 'createdAt', key: 'createdAt' },
-    { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
-    { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+        { title: 'Ngày tạo', dataIndex: 'createdAt', key: 'createdAt' },
+        { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+        { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
         {
             title: 'Hành động',
             key: 'action',
@@ -323,34 +234,35 @@ const WorkshopHome: React.FC = () => {
         },
     ];
 
-    // schedule table columns
+    // Các cột hiển thị danh sách lịch sửa chữa (Tab Lịch sửa chữa)
     const scheduleColumns = [
-  { title: 'STT', key: 'stt', width: 60, render: (_: any, __: any, index: number) => index + 1 },
-  { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
-  { title: 'Lịch bắt đầu', dataIndex: 'scheduleStart', key: 'scheduleStart' },
-  { title: 'Lịch kết thúc', dataIndex: 'scheduleEnd', key: 'scheduleEnd' },
-  { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
-  {
-    title: 'Hành động',
-    key: 'action',
-    render: (_: any, record: any) => {
-      const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
-      return (
-        <Button onClick={() => openScheduleForRecord(record)}>
-          {hasSchedule ? 'Chỉnh sửa' : 'Tạo lịch'}
-        </Button>
-      );
-    },
-  },
-];
+        { title: 'STT', key: 'stt', width: 60, render: (_: any, __: any, index: number) => index + 1 },
+        { title: 'Tàu', dataIndex: 'shipName', key: 'shipName', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+        { title: 'Lịch bắt đầu', dataIndex: 'scheduleStart', key: 'scheduleStart' },
+        { title: 'Lịch kết thúc', dataIndex: 'scheduleEnd', key: 'scheduleEnd' },
+        { title: 'Trạng thái', dataIndex: 'Status', key: 'Status', render: (v: string) => <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{v}</div> },
+        {
+            title: 'Hành động',
+            key: 'action',
+            render: (_: any, record: any) => {
+                const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
+                return (
+                    <Button onClick={() => openScheduleForRecord(record)}>
+                        {hasSchedule ? 'Chỉnh sửa' : 'Tạo lịch'}
+                    </Button>
+                );
+            },
+        },
+    ];
 
+    // Mở Modal lập lịch / chỉnh sửa lịch sửa chữa cho đơn hàng
     const openScheduleForRecord = (record: any) => {
         setSchedulingOrderId(record.id);
-        // Correct logic: Only consider as "editing schedule" if both ScheduleStartDate and ScheduleEndDate exist
         const hasSchedule = !!(record.ScheduleStartDate && record.ScheduleEndDate);
         setIsEditingSchedule(hasSchedule);
 
         try {
+            // Nếu đơn đã được lập lịch trước đó, hiển thị lại khoảng ngày cũ trên Picker
             if (hasSchedule) {
                 const s = record.ScheduleStartDate?.toDate ? moment(record.ScheduleStartDate.toDate()) : moment(record.ScheduleStartDate);
                 const e = record.ScheduleEndDate?.toDate ? moment(record.ScheduleEndDate.toDate()) : moment(record.ScheduleEndDate);
@@ -365,9 +277,8 @@ const WorkshopHome: React.FC = () => {
         setScheduleModalVisible(true);
     };
 
-    // derive schedule rows from orders and attach a Date object for filtering
+    // Tạo các trường ngày bắt đầu/kết thúc kiểu Date để phục vụ lọc dữ liệu
     const scheduleRows = orders.map((o) => {
-        
         let rawDateObj: Date | null = null;
         if (o.ScheduleStartDate?.toDate) rawDateObj = o.ScheduleStartDate.toDate();
         else if (o.ScheduleStartDate instanceof Date) rawDateObj = o.ScheduleStartDate;
@@ -377,45 +288,31 @@ const WorkshopHome: React.FC = () => {
             else if (o.StartDate instanceof Date) rawDateObj = o.StartDate;
         }
         const date = rawDateObj ? rawDateObj.toLocaleDateString('vi-VN') : (o.createdAt || '—');
-    // derive schedule start/end (dự kiến)
-    let scheduleStartObj: Date | null = null;
-    let scheduleEndObj: Date | null = null;
-    if (o.ScheduleStartDate?.toDate) scheduleStartObj = o.ScheduleStartDate.toDate();
-    else if (o.ScheduleStartDate instanceof Date) scheduleStartObj = o.ScheduleStartDate;
-    if (o.ScheduleEndDate?.toDate) scheduleEndObj = o.ScheduleEndDate.toDate();
-    else if (o.ScheduleEndDate instanceof Date) scheduleEndObj = o.ScheduleEndDate;
-    const scheduleStart = scheduleStartObj ? scheduleStartObj.toLocaleDateString('vi-VN') : '—';
-    const scheduleEnd = scheduleEndObj ? scheduleEndObj.toLocaleDateString('vi-VN') : '—';
+
+        let scheduleStartObj: Date | null = null;
+        let scheduleEndObj: Date | null = null;
+        if (o.ScheduleStartDate?.toDate) scheduleStartObj = o.ScheduleStartDate.toDate();
+        else if (o.ScheduleStartDate instanceof Date) scheduleStartObj = o.ScheduleStartDate;
+        if (o.ScheduleEndDate?.toDate) scheduleEndObj = o.ScheduleEndDate.toDate();
+        else if (o.ScheduleEndDate instanceof Date) scheduleEndObj = o.ScheduleEndDate;
+        const scheduleStart = scheduleStartObj ? scheduleStartObj.toLocaleDateString('vi-VN') : '—';
+        const scheduleEnd = scheduleEndObj ? scheduleEndObj.toLocaleDateString('vi-VN') : '—';
 
         return { ...o, date, _startDate: rawDateObj, _endDate: scheduleEndObj, scheduleStart, scheduleEnd };
     });
 
-    // date range filter removed
-
     const normalize = (str: string) => {
         if (!str) return '';
-        // normalize and strip diacritics (using unicode combining marks range)
         return String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
     };
 
-    // Return true for status values that mean "this order belongs in the schedule tab".
-    // Accept both legacy 'Sắp xếp lịch sửa chữa' and new 'Đã lên lịch'.
-    const isScheduledStatus = (s: any) => {
-        if (!s) return false;
-        const norm = normalize(String(s));
-        const targets = [normalize('sắp xếp lịch sửa chữa'), normalize('đã lên lịch')];
-        return targets.includes(norm);
-    };
-
-    // Adding valid schedule states
+    // Chỉ hiển thị các đơn có trạng thái "Đã lên lịch" hoặc "Sắp xếp lịch sửa chữa" trên Tab Lịch sửa chữa
     const validScheduleStates = ['Đã lên lịch', 'Sắp xếp lịch sửa chữa'];
-
-    // Replacing old filter logic with filtering by valid statuses
     const filteredScheduleRows = scheduleRows.filter((r) =>
         validScheduleStates.includes(r.Status)
     );
 
-    // Updating search filter to use filteredScheduleRows
+    // Áp dụng bộ lọc tìm kiếm text và bộ lọc khoảng thời gian (DatePicker Range)
     const filteredScheduleRowsWithSearch = filteredScheduleRows.filter((r) => {
         const normalizedSearch = (scheduleSearch || '').toString().toLowerCase().trim();
         const hay = `${r.shipName || ''} ${r.Status || ''} ${r.createdAt || ''}`.toLowerCase();
@@ -440,16 +337,13 @@ const WorkshopHome: React.FC = () => {
         return textMatch && dateMatch;
     });
 
-    // apply orders text search
+    // Lọc tìm kiếm đơn hàng thông thường
     const normalizedOrderSearch = (orderSearch || '').toString().toLowerCase().trim();
     const filteredOrders = orders.filter((o) => {
         if (!normalizedOrderSearch) return true;
-        // search only shipName and Status (exclude id)
         const hay = `${o.shipName || ''} ${o.Status || ''}`.toLowerCase();
         return hay.includes(normalizedOrderSearch);
     });
-
-    // (No inspected view here) Workshop only exposes Orders and Schedule via the sidebar.
 
     return (
         <WorkshopLayout selectedKey={selectedKey} onSelect={(key: string) => {
@@ -459,9 +353,9 @@ const WorkshopHome: React.FC = () => {
         }} userName={userName} loadingUser={loadingUser}>
 
             {selectedKey === 'orders' && (
-            <div className="w-full overflow-x-auto">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
+                <div className="w-full overflow-x-auto">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-4">
                             <Title level={5} className="m-0">Đơn sửa chữa</Title>
                             <Select
                                 style={{ width: 320 }}
@@ -480,190 +374,187 @@ const WorkshopHome: React.FC = () => {
                                 value={orderSearch}
                             />
                         </div>
-                </div>
-                <Table
-                    columns={columns}
-                    dataSource={filteredOrders}
-                    rowKey="id"
-                    loading={loadingOrders || refreshing}
-                    bordered
-                    className="shadow-sm"
-                    scroll={{ x: 'max-content' }}
-                />
-            </div>
-        )}
-
-        {selectedKey === 'employees' && (
-            <div>
-                <StaffManagement />
-            </div>
-        )}
-
-        {/* 'Inspected' view removed — workshop UI exposes only Orders and Schedule via the sidebar */}
-
-        {selectedKey === 'schedule' && (
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <Title level={5} className="m-0">Lịch sửa chữa</Title>
-                        <Select
-                            style={{ width: 320 }}
-                            placeholder="Chọn xưởng"
-                            value={selectedWorkshopId || undefined}
-                            onChange={(val) => setSelectedWorkshopId(val as string)}
-                            options={[{ label: 'Tất cả', value: 'ALL' }, ...workshops.map(w => ({ label: w.name, value: w.id }))]}
-                            notFoundContent={workshops.length === 0 ? 'Không có xưởng' : undefined}
-                        />
-                        <Input.Search
-                            placeholder="Tìm theo tàu, trạng thái..."
-                            allowClear
-                            onSearch={(v) => setScheduleSearch(v)}
-                            onChange={(e) => setScheduleSearch(e.target.value)}
-                            style={{ width: 320 }}
-                            value={scheduleSearch}
-                        />
-                        <DatePicker.RangePicker
-                            onChange={(vals) => setScheduleDateRange(vals as any)}
-                            value={scheduleDateRange as any}
-                        />
                     </div>
-                    <Space>
-                        {/* create button removed */}
-                    </Space>
-                </div>
-
-                <div className="w-full overflow-x-auto">
                     <Table
-                        columns={scheduleColumns.map(col => ({ ...col, ellipsis: true }))}
-                        dataSource={filteredScheduleRowsWithSearch}
+                        columns={columns}
+                        dataSource={filteredOrders}
                         rowKey="id"
                         loading={loadingOrders || refreshing}
                         bordered
-                        pagination={{ pageSize: 10 }}
+                        className="shadow-sm"
                         scroll={{ x: 'max-content' }}
-                        onRow={(record: any) => {
-                            try {
-                                const end = record._endDate ? new Date(record._endDate) : null;
-                                if (!end) return {} as any;
-                                // normalize to start of day (local)
-                                const today = new Date();
-                                today.setHours(0, 0, 0, 0);
-                                const tomorrow = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-
-                                const endTime = end.getTime();
-                                const tToday = today.getTime();
-                                // include whole of 'tomorrow' as yellow: treat anything up to the end of tomorrow as within 1 day after today
-                                const endOfTomorrow = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 - 1); // today + 2 days - 1ms => 23:59:59.999 of tomorrow
-                                const tEndOfTomorrow = endOfTomorrow.getTime();
-
-                                // If endDate is today or within 1 day after today (i.e. any time on tomorrow) -> yellow
-                                if (endTime >= tToday && endTime <= tEndOfTomorrow) {
-                                    return { style: { background: '#fff7e6' } } as any;
-                                }
-
-                                // If endDate is before today -> red
-                                if (endTime < tToday) {
-                                    return { style: { background: '#ffe6e6' } } as any;
-                                }
-
-                                return {} as any;
-                            } catch (e) {
-                                return {} as any;
-                            }
-                        }}
                     />
                 </div>
+            )}
 
-                <Modal
-                    title={'Lịch sửa chữa'}
-                    open={scheduleModalVisible}
-                    okText="Lưu"
-                    cancelText="Huỷ"
-                    onCancel={() => {
-                        setScheduleModalVisible(false);
-                        form.resetFields();
-                        setSchedulingOrderId(null);
-                        setIsEditingSchedule(false);
-                    }}
-                    onOk={async () => {
-                        try {
-                            const vals = await form.validateFields();
-                            const range = vals.dateRange as any[];
-                            const isCompleted = vals.isCompleted || false; // lấy trạng thái checkbox
+            {selectedKey === 'employees' && (
+                <div>
+                    <StaffManagement />
+                </div>
+            )}
 
-                            if (!schedulingOrderId) throw new Error('Order id missing');
+            {selectedKey === 'schedule' && (
+                <div>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-4">
+                            <Title level={5} className="m-0">Lịch sửa chữa</Title>
+                            <Select
+                                style={{ width: 320 }}
+                                placeholder="Chọn xưởng"
+                                value={selectedWorkshopId || undefined}
+                                onChange={(val) => setSelectedWorkshopId(val as string)}
+                                options={[{ label: 'Tất cả', value: 'ALL' }, ...workshops.map(w => ({ label: w.name, value: w.id }))]}
+                                notFoundContent={workshops.length === 0 ? 'Không có xưởng' : undefined}
+                            />
+                            <Input.Search
+                                placeholder="Tìm theo tàu, trạng thái..."
+                                allowClear
+                                onSearch={(v) => setScheduleSearch(v)}
+                                onChange={(e) => setScheduleSearch(e.target.value)}
+                                style={{ width: 320 }}
+                                value={scheduleSearch}
+                            />
+                            <DatePicker.RangePicker
+                                onChange={(vals) => setScheduleDateRange(vals as any)}
+                                value={scheduleDateRange as any}
+                            />
+                        </div>
+                    </div>
 
-                            setScheduling(true);
-                            const payload: any = {};
+                    <div className="w-full overflow-x-auto">
+                        <Table
+                            columns={scheduleColumns.map(col => ({ ...col, ellipsis: true }))}
+                            dataSource={filteredScheduleRowsWithSearch}
+                            rowKey="id"
+                            loading={loadingOrders || refreshing}
+                            bordered
+                            pagination={{ pageSize: 10 }}
+                            scroll={{ x: 'max-content' }}
+                            // Thuật toán bôi màu cảnh báo thời hạn sửa chữa trên Table:
+                            onRow={(record: any) => {
+                                try {
+                                    const end = record._endDate ? new Date(record._endDate) : null;
+                                    if (!end) return {} as any;
+                                    
+                                    const today = new Date();
+                                    today.setHours(0, 0, 0, 0); // Đưa về 0 giờ ngày hôm nay để so sánh chuẩn xác
+                                    
+                                    const endTime = end.getTime();
+                                    const tToday = today.getTime();
+                                    
+                                    // Thời gian kết thúc của ngày mai (23:59:59.999)
+                                    const endOfTomorrow = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 - 1);
+                                    const tEndOfTomorrow = endOfTomorrow.getTime();
 
-                            // Lưu lịch sửa chữa
-                            if (range && range[0] && range[1]) {
-                                const startMoment: any = range[0];
-                                const endMoment: any = range[1];
+                                    // Cảnh báo màu VÀNG nhạt (#fff7e6) nếu hạn hoàn thành rơi vào ngày hôm nay hoặc ngày mai (cần tập trung nhân sự)
+                                    if (endTime >= tToday && endTime <= tEndOfTomorrow) {
+                                        return { style: { background: '#fff7e6' } } as any;
+                                    }
 
-                                const sDate = startMoment.toDate();
-                                sDate.setHours(0, 0, 0, 0);
+                                    // Báo động màu ĐỎ nhạt (#ffe6e6) nếu đã quá thời hạn kết thúc sửa chữa dự kiến mà đơn vẫn chưa hoàn thành
+                                    if (endTime < tToday) {
+                                        return { style: { background: '#ffe6e6' } } as any;
+                                    }
 
-                                const eDate = endMoment.toDate();
-                                eDate.setHours(23, 59, 59, 999);
+                                    return {} as any;
+                                } catch (e) {
+                                    return {} as any;
+                                }
+                            }}
+                        />
+                    </div>
 
-                                payload.ScheduleStartDate = Timestamp.fromDate(sDate);
-                                payload.ScheduleEndDate = Timestamp.fromDate(eDate);
-                            }
-
-                            // Nếu đang CHỈNH SỬA → cho phép đổi trạng thái
-                            if (isEditingSchedule) {
-                                payload.Status = isCompleted ? 'Hoàn thành sửa chữa' : 'Đã lên lịch';
-                            } else {
-                                // Nếu là TẠO LỊCH mới
-                                payload.Status = 'Đã lên lịch';
-                            }
-
-                            await updateDoc(doc(db, 'repairOrder', schedulingOrderId), payload);
-
-                            message.success(
-                                isCompleted ? 'Đã hoàn thành sửa chữa' :
-                                isEditingSchedule ? 'Đã cập nhật lịch' :
-                                'Đã tạo lịch cho đơn'
-                            );
-
-                            // reset modal
+                    {/* Modal thiết lập ngày công sửa chữa và Đánh dấu hoàn thành */}
+                    <Modal
+                        title={'Lịch sửa chữa'}
+                        open={scheduleModalVisible}
+                        okText="Lưu"
+                        cancelText="Huỷ"
+                        onCancel={() => {
                             setScheduleModalVisible(false);
                             form.resetFields();
                             setSchedulingOrderId(null);
-                            await fetchOrdersForWorkshop(selectedWorkshopId);
-                            setSelectedKey('schedule');
-
-                        } catch (e: any) {
-                            message.error(e.message || 'Lỗi khi lưu lịch');
-                        } finally {
-                            setScheduling(false);
                             setIsEditingSchedule(false);
-                        }
-                    }}
-                    confirmLoading={scheduling}
-                >
-                    <Form form={form} layout="vertical">
-                        <Form.Item
-                            name="dateRange"
-                            label="Chọn ngày bắt đầu - kết thúc"
-                            rules={[{ required: true }]}
-                        >
-                            <DatePicker.RangePicker />
-                        </Form.Item>
+                        }}
+                        onOk={async () => {
+                            try {
+                                const vals = await form.validateFields();
+                                const range = vals.dateRange as any[];
+                                const isCompleted = vals.isCompleted || false; // Trạng thái checkbox hoàn thành
 
-                        {/* Checkbox chỉ hiện khi CHỈNH SỬA lịch */}
-                        {isEditingSchedule && (
-                            <Form.Item name="isCompleted" valuePropName="checked">
-                                <Checkbox>Hoàn thành sửa chữa</Checkbox>
+                                if (!schedulingOrderId) throw new Error('Order id missing');
+
+                                setScheduling(true);
+                                const payload: any = {};
+
+                                // Lưu trữ khoảng ngày sửa chữa dự tính (Timestamp Firestore)
+                                if (range && range[0] && range[1]) {
+                                    const startMoment: any = range[0];
+                                    const endMoment: any = range[1];
+
+                                    const sDate = startMoment.toDate();
+                                    sDate.setHours(0, 0, 0, 0);
+
+                                    const eDate = endMoment.toDate();
+                                    eDate.setHours(23, 59, 59, 999);
+
+                                    payload.ScheduleStartDate = Timestamp.fromDate(sDate);
+                                    payload.ScheduleEndDate = Timestamp.fromDate(eDate);
+                                }
+
+                                // Nếu là thao tác "Chỉnh sửa lịch", cho phép tích checkbox đánh dấu "Hoàn thành sửa chữa"
+                                if (isEditingSchedule) {
+                                    payload.Status = isCompleted ? 'Hoàn thành sửa chữa' : 'Đã lên lịch';
+                                } else {
+                                    // Tạo lịch lần đầu tiên -> trạng thái chuyển sang "Đã lên lịch"
+                                    payload.Status = 'Đã lên lịch';
+                                }
+
+                                // Cập nhật trực tiếp lên đơn hàng ở Firestore
+                                await updateDoc(doc(db, 'repairOrder', schedulingOrderId), payload);
+
+                                message.success(
+                                    isCompleted ? 'Đã hoàn thành sửa chữa' :
+                                    isEditingSchedule ? 'Đã cập nhật lịch' :
+                                    'Đã tạo lịch cho đơn'
+                                );
+
+                                // Đóng modal và reset
+                                setScheduleModalVisible(false);
+                                form.resetFields();
+                                setSchedulingOrderId(null);
+                                await fetchOrdersForWorkshop(selectedWorkshopId);
+                                setSelectedKey('schedule');
+
+                            } catch (e: any) {
+                                message.error(e.message || 'Lỗi khi lưu lịch');
+                            } finally {
+                                setScheduling(false);
+                                setIsEditingSchedule(false);
+                            }
+                        }}
+                        confirmLoading={scheduling}
+                    >
+                        <Form form={form} layout="vertical">
+                            <Form.Item
+                                name="dateRange"
+                                label="Chọn ngày bắt đầu - kết thúc"
+                                rules={[{ required: true }]}
+                            >
+                                <DatePicker.RangePicker />
                             </Form.Item>
-                        )}
-                    </Form>
-                </Modal>
-            </div>
-        )}
-    </WorkshopLayout>
-);
-};
 
+                            {/* Checkbox đánh dấu hoàn thành sửa chữa chỉ xuất hiện khi chỉnh sửa lịch cũ */}
+                            {isEditingSchedule && (
+                                <Form.Item name="isCompleted" valuePropName="checked">
+                                    <Checkbox>Hoàn thành sửa chữa</Checkbox>
+                                </Form.Item>
+                            )}
+                        </Form>
+                    </Modal>
+                </div>
+            )}
+        </WorkshopLayout>
+    );
+};
 export default WorkshopHome;
