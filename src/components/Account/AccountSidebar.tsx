@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
-import { DollarCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, CreditCardOutlined, InboxOutlined, DashboardOutlined, FileTextOutlined, BarChartOutlined } from '@ant-design/icons';
+import { MenuFoldOutlined, MenuUnfoldOutlined, CreditCardOutlined, InboxOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 const { Sider } = Layout;
@@ -24,7 +24,6 @@ const AccountSidebar: React.FC<AccountSidebarProps> = ({ selectedKey = 'invoices
         if (key === 'invoices') navigate('/account');
         if (key === 'payments') navigate('/account/payment');
         if (key === 'inventory') navigate('/account/inventory');
-        if (key === 'statistics') navigate('/account/statistics');
     };
 
     const menuItems = [
@@ -32,7 +31,7 @@ const AccountSidebar: React.FC<AccountSidebarProps> = ({ selectedKey = 'invoices
             key: 'invoices',
             icon: <FileTextOutlined />,
             label: 'Hóa đơn',
-            onClick: () => navigate('/account/invoices'),
+            onClick: () => navigate('/account'),
         },
         {
             key: 'payments',
@@ -43,12 +42,6 @@ const AccountSidebar: React.FC<AccountSidebarProps> = ({ selectedKey = 'invoices
             key: 'inventory',
             icon: <InboxOutlined />,
             label: 'Quản lý kho',
-        },
-        {
-            key: 'statistics',
-            icon: <BarChartOutlined />,
-            label: 'Thống kê',
-            onClick: () => navigate('/account/statistics'),
         },
     ];
 

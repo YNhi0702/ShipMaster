@@ -136,7 +136,6 @@ const App: React.FC = () => {
           <Route index element={<AccountHome />} />
           <Route path="payment" element={<PaymentList />} />
           <Route path="inventory" element={<InventoryManagement />} />
-          <Route path="statistics" element={<StatisticsPage />} />   {/* 👈 ĐÃ THÊM ROUTE NÀY */}
         </Route>
 
         {/* ============ DIRECTOR ============ */}
@@ -151,6 +150,7 @@ const App: React.FC = () => {
           <Route index element={<UserManagement />} />
           <Route path="users" element={<UserManagement />} />
           <Route path="workshops" element={<WorkshopManagement />} />
+          <Route path="statistics" element={<StatisticsPage />} />
         </Route>
 
       </Routes>

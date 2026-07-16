@@ -1,6 +1,6 @@
 import React from 'react';
 import { Layout, Menu, Button } from 'antd';
-import { UserOutlined, ShopOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons';
+import { UserOutlined, ShopOutlined, MenuFoldOutlined, MenuUnfoldOutlined, BarChartOutlined } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const { Sider } = Layout;
@@ -17,6 +17,7 @@ const DirectorSidebar: React.FC<DirectorSidebarProps> = ({ collapsed = false, on
     const getSelectedKey = () => {
         const path = location.pathname;
         if (path.includes('/director/workshops')) return 'workshops';
+        if (path.includes('/director/statistics')) return 'statistics';
         return 'users';
     };
 
@@ -32,6 +33,12 @@ const DirectorSidebar: React.FC<DirectorSidebarProps> = ({ collapsed = false, on
             icon: <ShopOutlined />,
             label: 'Quản lý xưởng',
             onClick: () => navigate('/director/workshops'),
+        },
+        {
+            key: 'statistics',
+            icon: <BarChartOutlined />,
+            label: 'Thống kê',
+            onClick: () => navigate('/director/statistics'),
         },
     ];
 
